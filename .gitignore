@@ -1,0 +1,31 @@
+# Build directories
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.DS_Store
+Thumbs.db
+
+# Simulation results
+final_run/
+final_results/
+results_*/
+compare_*/
+compare_test/
+compare_v2/
+compare_v3/
+compare_v4/
+
+# External repos
+VelMCFluids/
+wosx/
+
+# Temp files
+*.log
+*.aux
+*.out
+*.toc
+*.synctex.gz
+
+# NumPy cache
+__pycache__/
