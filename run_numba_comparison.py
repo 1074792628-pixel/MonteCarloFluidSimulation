@@ -1,12 +1,12 @@
 """
-Numba-accelerated comparison: 2022 vs 2024 Monte Carlo Fluids
+Numba-accelerated comparison: 2022 vs Stream Monte Carlo Fluids
 """
 import numpy as np, time, os, argparse
 import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 from fluid_sim_2022_numba import FluidSim2022N
-from fluid_sim_2024_numba import FluidSim2024N
+from fluid_sim_stream_numba import FluidSimStream
 from numba_wos import curl_2d_numba, divergence_2d_numba
 from scipy.ndimage import gaussian_filter as gs
 
@@ -29,28 +29,28 @@ def run_test(grid_res, n_walks, n_steps, dt, nu, out_dir, has_obs=False,
                     vel0[i, j] = 0.0
 
     sim22 = FluidSim2022N(grid_res, nu, dt, n_walks, has_obs, ox, oy, orad)
-    sim24 = FluidSim2024N(grid_res, nu, dt, n_walks, has_obs, ox, oy, orad)
+    simStream = FluidSimStream(grid_res, nu, dt, n_walks, has_obs, ox, oy, orad)
     sim22.set_velocity(vel0.copy())
-    sim24.set_velocity(vel0.copy())
+    simStream.set_velocity(vel0.copy())
 
     e22, e24 = [], []
     d22, d24 = [], []
 
     print(f"\nGrid: {grid_res}x{grid_res} | Walks: {n_walks} | Steps: {n_steps} | dt={dt} | nu={nu}")
-    print(f"{'Step':>5} | {'KE22':>8} {'KE24':>8} | {'Div22':>9} {'Div24':>9} | Time")
+    print(f"{'Step':>5} | {'KE22':>8} {'KEsf':>8} | {'Div22':>9} {'Divsf':>9} | Time")
     print("-" * 55)
 
     for step in range(n_steps):
         t0 = time.time()
         sim22.step()
         t22 = time.time() - t0
-        sim24.step()
+        simStream.step()
         t24 = time.time() - t22 - t0
 
         e22.append(sim22.kinetic_energy())
-        e24.append(sim24.kinetic_energy())
+        e24.append(simStream.kinetic_energy())
         d22.append(sim22.divergence_error())
-        d24.append(sim24.divergence_error())
+        d24.append(simStream.divergence_error())
 
         if step % 5 == 0 or step == n_steps - 1:
             print(f"{step:5d} | {e22[-1]:8.2f} {e24[-1]:8.2f} | {d22[-1]:9.6f} {d24[-1]:9.6f} | {t22+t24:.1f}s")
@@ -58,7 +58,7 @@ def run_test(grid_res, n_walks, n_steps, dt, nu, out_dir, has_obs=False,
     # Final visualization
     fig, axes = plt.subplots(2, 3, figsize=(15, 10))
     for row, (sim, name) in enumerate([(sim22, '2022: Pressure Poisson'),
-                                        (sim24, '2024: Stream Function')]):
+                                        (simStream, 'Stream: Stream Function')]):
         curl = sim.vorticity()
         speed = np.sqrt(sim.velocity[..., 0]**2 + sim.velocity[..., 1]**2)
         vmax = max(abs(curl).max(), 1e-6)
@@ -87,12 +87,12 @@ def run_test(grid_res, n_walks, n_steps, dt, nu, out_dir, has_obs=False,
     # Energy and divergence plots
     fig, axes = plt.subplots(1, 2, figsize=(12, 4))
     axes[0].plot(e22, label='2022 (Pressure)', marker='.')
-    axes[0].plot(e24, label='2024 (Stream fn)', marker='.')
+    axes[0].plot(e24, label='Stream (Stream fn)', marker='.')
     axes[0].set_xlabel('Step'); axes[0].set_ylabel('KE'); axes[0].legend()
     axes[0].set_title('Kinetic Energy')
 
     axes[1].plot(d22, label='2022', marker='.')
-    axes[1].plot(d24, label='2024', marker='.')
+    axes[1].plot(d24, label='Stream', marker='.')
     axes[1].set_xlabel('Step'); axes[1].set_ylabel('Mean |div|')
     axes[1].legend(); axes[1].set_title('Divergence Error')
     axes[1].set_yscale('log')
@@ -102,13 +102,13 @@ def run_test(grid_res, n_walks, n_steps, dt, nu, out_dir, has_obs=False,
     plt.close()
 
     np.savez(os.path.join(out_dir, 'results.npz'),
-             vel22=sim22.velocity, vel24=sim24.velocity,
+             vel22=sim22.velocity, vel24=simStream.velocity,
              e22=e22, e24=e24, d22=d22, d24=d24)
 
     print(f"\n=== Summary ===")
     print(f"2022: Final KE={e22[-1]:.2f}, Mean|div|={np.mean(d22):.6f}")
-    print(f"2024: Final KE={e24[-1]:.2f}, Mean|div|={np.mean(d24):.6f}")
-    print(f"2022 time: {sim22.stats['total_time']:.1f}s, 2024 time: {sim24.stats['total_time']:.1f}s")
+    print(f"Stream: Final KE={e24[-1]:.2f}, Mean|div|={np.mean(d24):.6f}")
+    print(f"2022 time: {sim22.stats['total_time']:.1f}s, Stream time: {simStream.stats['total_time']:.1f}s")
 
 
 if __name__ == '__main__':
@@ -123,7 +123,7 @@ if __name__ == '__main__':
     args = parser.parse_args()
 
     print("=" * 50)
-    print("Monte Carlo Fluids: 2022 vs 2024 (Numba)")
+    print("Monte Carlo Fluids: 2022 vs Stream (Numba)")
     print("=" * 50)
     run_test(args.grid, args.walks, args.steps, args.dt, args.nu,
              args.out, has_obs=args.obs)

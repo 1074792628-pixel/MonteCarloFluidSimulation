@@ -1,32 +1,24 @@
 #!/usr/bin/env python3
 """
-Final Comparison: 2022 (Pressure-Poisson) vs 2024 (Stream Function) Monte Carlo Fluids
+Comparison: Pressure-Poisson vs Stream Function projection for MC Fluids
 
-Uses Numba-accelerated Walk-on-Spheres for:
-  - Diffusion step (both methods)
-  - Pressure Poisson solve (2022 method)
-  - Stream function Poisson solve (2024 method)
+Both use Numba-accelerated Walk-on-Spheres for:
+  - Diffusion step
+  - Poisson solve (for p or ψ)
 
-Comparison metrics:
-  - Kinetic energy evolution
-  - Divergence error
-  - Vorticity field
-  - Runtime
+Metrics: KE, divergence error, vorticity, runtime
 
-Test cases:
-  - Taylor-Green decaying vortices (smooth, periodic-like)
-  - Flow past a cylinder (Karman vortex street, with obstacle)
+Test: Taylor-Green decaying vortices
 
 References:
   [2022] Rioux-Lavoie et al. "A Monte Carlo Method for Fluid Simulation"
-  [2024] Sugimoto et al. "Velocity-Based Monte Carlo Fluids"
 """
 import numpy as np, time, os, argparse
 import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 from fluid_sim_2022_numba import FluidSim2022N
-from fluid_sim_2024_numba import FluidSim2024N
+from fluid_sim_stream_numba import FluidSimStream
 
 
 def taylor_green_vortex(res, nu=0.05, t=0.0):
@@ -45,7 +37,7 @@ def run_comparison(grid_res=12, n_walks=256, n_steps=20, dt=0.04, nu=0.05,
 
     # Initialize simulations
     sim22 = FluidSim2022N(grid_res, nu, dt, n_walks, has_obs, ox, oy, orad)
-    sim24 = FluidSim2024N(grid_res, nu, dt, n_walks, has_obs, ox, oy, orad)
+    sim24 = FluidSimStream(grid_res, nu, dt, n_walks, has_obs, ox, oy, orad)
 
     vel0 = taylor_green_vortex(grid_res, nu)
     if has_obs:
