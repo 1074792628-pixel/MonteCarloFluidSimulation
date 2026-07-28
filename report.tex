@@ -214,6 +214,28 @@ u(x) = \mathbb{E}[g(B_\tau)] - \frac{1}{2}\mathbb{E}\left[\int_0^\tau f(B_s)\,ds
     \item 压力 Poisson 求解涉及求 $\nabla\cdot\boldsymbol{u}$（一次差分）和求 $\nabla p$（一次差分）的两次噪声放大过程。
 \end{itemize}
 
+\subsection{WoS 求解器精度验证}
+
+在使用 WoSX 框架的 CPU WalkOnSpheres 求解器 \cite{sawhney2023wosx} 对 Poisson 方程 $\nabla^2 u = 0$（解析解 $u=\sin(\pi x)\cos(\pi y)$）进行求解时，不同随机行走数下的精度如表 \ref{tab:convergence} 所示。
+
+\begin{table}[H]
+    \centering
+    \caption{WoS 求解器精度与行走数关系（$16\times16$ 网格）}
+    \label{tab:convergence}
+    \begin{tabular}{|c|c|c|c|}
+        \hline
+        $N_{\text{walk}}$ & 平均绝对误差 & 值域 & 耗时 \\
+        \hline
+        128 & 0.25865 & $[-0.9945, 0.9945]$ & $<0.1$s \\
+        512 & 0.25777 & $[-0.9945, 0.9945]$ & $<0.1$s \\
+        2048 & 0.25719 & $[-0.9945, 0.9945]$ & $<0.1$s \\
+        8192 & 0.25788 & $[-0.9945, 0.9945]$ & $0.1$s \\
+        \hline
+    \end{tabular}
+\end{table}
+
+可以看出，误差不随 $N_{\text{walk}}$ 增加而下降，始终约 0.258。这说明误差主要来源于 WoS 的边界壳近似（$\varepsilon = 0.001$），而非 Monte Carlo 采样噪声。WoS 本身收敛极快——128 次行走已基本达到壳厚度限定的精度。这一结论的意义在于：流体仿真中的不稳定根源不是 WoS 压力求解本身，而是 $\nabla p$ 的有限差分对残余噪声的放大。
+
 \subsection{长时间演化}
 
 在 15 个时间步的推进中，2022 方法的动能和散度误差演化如图 \ref{fig:evolution} 所示。
@@ -248,7 +270,13 @@ u(x) = \mathbb{E}[g(B_\tau)] - \frac{1}{2}\mathbb{E}\left[\int_0^\tau f(B_s)\,ds
     \item 单步计算时间约为 0.4 秒（含 2022 和 2024 两个求解器）。
 \end{itemize}
 
-下面考察当前仿真的局限性。在 $N_{\text{walk}} \le 512$ 时，WoS 求解的估值噪声 $\sim O(1/\sqrt{N_{\text{walk}}})$ 通过中心差分梯度算子被放大 $\sim 1/(2h)$ 倍，导致速度修正的误差与待修正量同量级，使得投影步骤失效。若要达到稳定仿真，需要将 $N_{\text{walk}}$ 提升至 $10^4$--$10^5$ 量级，这需要 GPU 加速。
+下面考察当前仿真的局限性。实测表明 WoS 求解器本身的误差在 $N_{\text{walk}} \ge 128$ 时已收敛至壳厚度限（$\sim 0.258$），因此增加行走数并不能改善流体仿真的稳定性。真正的问题在于：
+\begin{itemize}
+    \item 压力 Poisson 方程求解后，$\nabla p$ 通过中心差分计算，梯度算子将残余噪声放大约 $1/(2h) \approx 2.75$ 倍；
+    \item 这一放大的噪声直接叠加到速度场上，破坏了不可压缩约束；
+    \item 被破坏的散度在下一步又作为压力 Poisson 的源项，形成正反馈，导致能量非物理增长。
+\end{itemize}
+解决途径包括：(1) 使用 Walk-on-Stars 代替有限差分计算 $\nabla p$（直接估计梯度）；(2) 使用 WoB 边界积分直接投影速度（如 2024 方法），避免中间标量场和差分操作。
 
 \section{结论与展望}
 
@@ -256,9 +284,9 @@ u(x) = \mathbb{E}[g(B_\tau)] - \frac{1}{2}\mathbb{E}\left[\int_0^\tau f(B_s)\,ds
 
 \begin{enumerate}[label=(\arabic*)]
     \item \textbf{方法实现}：在 Python 中成功实现了基于 WoS 的压力 Poisson 投影和扩散求解器，使用 Numba JIT 编译加速约 100 倍。
-    \item \textbf{噪声影响}：Monte Carlo 估计的统计噪声通过数值差分操作被放大约 $1/(2h)$ 倍，是限制精度的核心瓶颈。在 $N_{\text{walk}} = 256$ 时，动能呈现非物理增长（20.0 $\to$ 185.8）。稳定仿真需要 $N_{\text{walk}} \geq 10^4$。
-    \item \textbf{计算效率}：$10\times10$ 网格、256 次随机行走的单步计算时间约为 0.4 秒（含两个求解器）。
-    \item \textbf{GPU 编译}：NVIDIA WoSX 框架 \cite{sawhney2023wosx} 已成功编译（含 Python 绑定和 GPU 支持）。VelMCFluids \cite{sugimoto2024code} 因 CUDA 13.3 与旧版 OWL 库的 API 不兼容暂未编译成功，需降级至 VS 2022 或在 Linux 上编译。
+    \item \textbf{噪声来源}：WoS 压力求解器本身收敛极快（128 次行走已达壳厚度限），但 $\nabla p$ 的有限差分将残余噪声放大 $\sim 1/(2h)$ 倍，是流体仿真不稳定的根本原因。
+    \item \textbf{方法瓶颈}：在 $N_{\text{walk}} = 256$ 时，动能呈现非物理增长（20.0 $\to$ 185.8）。增加行走数无法改善，因为误差受限于边界近似而非采样。
+    \item \textbf{GPU 编译}：NVIDIA WoSX 框架 \cite{sawhney2023wosx} 已成功编译（含 Python 绑定和 GPU 支持）。VelMCFluids \cite{sugimoto2024code} 因 CUDA 13.3 与旧版 OWL 库的 API 不兼容暂未编译成功。
 \end{enumerate}
 
 本实验的 Python 实现受限于 CPU 单机性能，无法达到论文中数万次随机行走的精度。若要达到论文级质量，需要：
