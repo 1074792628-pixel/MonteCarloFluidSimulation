@@ -105,10 +105,10 @@ u(x) = \mathbb{E}[g(B_\tau)] - \mathbb{E}\left[\int_0^\tau f(B_s)\,ds\right],
 2024 年方法\cite{sugimoto2024}的核心创新在于用 Walk-on-Boundary（WoB）边界积分直接估计 $\nabla p$，而非求解标量压力 $p$。其完整的多项式估计包含四个子项（详见原文 Eq.~14--16 及图 3）：
 
 \begin{align}
-\nabla p(\boldsymbol{x}) = &\underbrace{\int_{B(\boldsymbol{x})} \boldsymbol{K}(\boldsymbol{x},\boldsymbol{y})\cdot\Delta\boldsymbol{u}\,d\boldsymbol{y}}_{\text{1. 奇异体积分 (singular volume term)}} \nonumber \\
-&+ \underbrace{\int_{\partial\Omega_{\text{pseudo}}} \nabla G(\boldsymbol{x}-\boldsymbol{y})\left[\boldsymbol{n}\cdot(\boldsymbol{u}-\boldsymbol{u}_\infty)\right] dS_{\boldsymbol{y}}}_{\text{2. 伪边界项 (pseudo-boundary term)}} \nonumber \\
-&+ \underbrace{\sum_k \boldsymbol{f}_k\,\nabla G(\boldsymbol{x}-\boldsymbol{y}_k)}_{\text{3. 速度源项 (velocity source term)}} \nonumber \\
-&+ \underbrace{\iint_{\partial\Omega} \nabla G(\boldsymbol{x}-\boldsymbol{y})\, \boldsymbol{n}(\boldsymbol{y})\cdot(\boldsymbol{u}(\boldsymbol{y})-\boldsymbol{u}_{\text{solid}})\,\Pi(\boldsymbol{y},\boldsymbol{y}')\,dS_{\boldsymbol{y}}}_{\text{4. 边界路径积分 (boundary path)}}.
+\nabla p(\boldsymbol{x}) = &\underbrace{\int_{B(\boldsymbol{x})} \boldsymbol{K}(\boldsymbol{x},\boldsymbol{y})\cdot\Delta\boldsymbol{u}\,d\boldsymbol{y}}_{\text{1. singular volume term}} \nonumber \\
+&+ \underbrace{\int_{\partial\Omega_{\text{pseudo}}} \nabla G(\boldsymbol{x}-\boldsymbol{y})\left[\boldsymbol{n}\cdot(\boldsymbol{u}-\boldsymbol{u}_\infty)\right] dS_{\boldsymbol{y}}}_{\text{2. pseudo-boundary term}} \nonumber \\
+&+ \underbrace{\sum_k \boldsymbol{f}_k\,\nabla G(\boldsymbol{x}-\boldsymbol{y}_k)}_{\text{3. velocity source term}} \nonumber \\
+&+ \underbrace{\iint_{\partial\Omega} \nabla G(\boldsymbol{x}-\boldsymbol{y})\, \boldsymbol{n}(\boldsymbol{y})\cdot(\boldsymbol{u}(\boldsymbol{y})-\boldsymbol{u}_{\text{solid}})\,\Pi(\boldsymbol{y},\boldsymbol{y}')\,dS_{\boldsymbol{y}}}_{\text{4. boundary path}}.
 \label{eq:wob_four_terms}
 \end{align}
 
@@ -140,7 +140,7 @@ p_h(\boldsymbol{x}) = \mathbb{E}\left[-p_p(\boldsymbol{y}_{\partial\Omega})\righ
 
 \begin{enumerate}[label=(\arabic*)]
     \item 用 MC 体积积分估计特解 $p_p(\boldsymbol{x})$（式 \ref{eq:particular}），样本均匀分布在 $[-1,1]^2$；
-    \item 对 $N_{\text{ray}}$ 条随机 WoB 射线，分别在边界撞点处估计 $p_p(\boldsymbol{y}_{\partial\Omega})$，取均值作为 $-\mathbb{E}[p_p(\boldsymbol{y}_{\partial\Omega})]$（式 \ref{eq:harmonic_correction}）。
+    \item 对 $N_{\text{ray}}$ 条随机 WoB 射线，分别在边界撞点处估计 $p_p(\boldsymbol{y}_{\partial\Omega})$，\\\hspace{4.2em}取均值作为 $-\mathbb{E}[p_p(\boldsymbol{y}_{\partial\Omega})]$（式 \ref{eq:harmonic_correction}）。
     \item $p(\boldsymbol{x}) = p_p(\boldsymbol{x}) - \mathbb{E}[p_p(\boldsymbol{y}_{\partial\Omega})]$；
     \item Gaussian 平滑 $p$ 后，用中心差分计算 $\nabla p$，修正速度。
 \end{enumerate}
@@ -168,7 +168,8 @@ p_h(\boldsymbol{x}) = \mathbb{E}\left[-p_p(\boldsymbol{y}_{\partial\Omega})\righ
     \begin{itemize}
         \item \texttt{\_ray\_intersect\_rect\_numba()}：矩形域射线-边界求交；
         \item \texttt{\_wob\_particular\_point()}：MC 积分估计自由空间特解 $p_p$；
-        \item \texttt{wob\_poisson\_point\_numba()}：单点 WoB Poisson 求解 $p(x) = p_p(x) - \mathbb{E}[p_p(y_{\partial\Omega})]$；
+        \item \texttt{wob\_poisson\_point\_numba()}：单点 WoB Poisson 求解\\
+        \hspace{4.2em} $p(x) = p_p(x) - \mathbb{E}[p_p(y_{\partial\Omega})]$；
         \item \texttt{wob\_poisson\_grid\_numba()}：网格并行版；
         \item \texttt{wob\_project\_grid\_numba()}：完整的 WoB 投影管线。
     \end{itemize}
@@ -218,7 +219,9 @@ p_h(\boldsymbol{x}) = \mathbb{E}\left[-p_p(\boldsymbol{y}_{\partial\Omega})\righ
 
 \subsection{Poisson 求解器精度验证}
 
-本实验首先验证了 WoS 和 WoB 两种 Poisson 求解器在标量问题 $\nabla^2 p = -2\pi^2\sin(\pi x)\sin(\pi y)$（解析解 $p = \sin(\pi x)\sin(\pi y)$）在 $[-1,1]^2$ 上的精度。结果在 $16\times16$ 网格、Gaussian 平滑 $\sigma=0.4$ 后如图 \ref{fig:poisson_accuracy} 所示。WoS 的均方根误差 (RMSE) 约 0.175，WoB 约 0.324。WoS 略优的原因是 WoB 的特解估计（MC 体积积分）引入了额外的采样噪声。两者均远优于不经过平滑处理的原始误差，说明 Gaussian 平滑对抑制 MC 噪声至关重要。
+本实验首先验证了 WoS 和 WoB 两种 Poisson 求解器在标量问题\\
+$\nabla^2 p = -2\pi^2\sin(\pi x)\sin(\pi y)$（解析解 $p = \sin(\pi x)\sin(\pi y)$）\\
+在 $[-1,1]^2$ 上的精度。结果（$16\times16$ 网格、Gaussian 平滑 $\sigma=0.4$）如图 \ref{fig:poisson_accuracy} 所示。WoS 的均方根误差 (RMSE) 约 0.175，WoB 约 0.324。WoS 略优的原因是 WoB 的特解估计（MC 体积积分）引入了额外的采样噪声。两者均远优于不经过平滑处理的原始误差，说明 Gaussian 平滑对抑制 MC 噪声至关重要。
 
 \begin{figure}[H]
     \centering
