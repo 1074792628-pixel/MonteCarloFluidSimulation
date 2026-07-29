@@ -262,44 +262,43 @@ WoS 在单步投影上表现优于 WoB，这是因为 WoS 的采样策略直接�
 
 \subsection{WoS 与 WoB 长时间演化对比}
 
-在 $12\times12$ 网格上，两种方法从 Taylor-Green 初始场运行 15 个时间步，动能与散度误差的演化如图 \ref{fig:full_comparison} 所示，数值汇总于表 \ref{tab:full_comparison}。
+三种方案的动能与散度误差演化如图 \ref{fig:energy_div} 所示，数值汇总于表 \ref{tab:full_comparison}。
 
 \begin{figure}[H]
     \centering
-    \includegraphics[width=0.95\textwidth]{report_results/energy_divergence_comparison.png}
-    \caption{WoS 与 WoB 方法在 15 步时间推进的动能与散度误差演化对比。
-    （$\Delta t=0.03$, $\nu=0.05$, $12\times12$ 网格，WoS: $N_{\text{walk}}=512$，WoB: $N_{\text{part}}=512$, $N_{\text{ray}}=128$）}
+    \includegraphics[width=0.95\textwidth]{report_results/three_way_comparison.png}
+    \caption{三种方案的动能与散度误差演化对比。
+    （$\Delta t=0.03$, $\nu=0.05$。WoS 默认: $12\times12$ 网格，$N_{\text{walk}}=512$；
+    WoS 修复: $10\times10$ 网格，$N_{\text{walk}}=4096$，$\sigma=0.5$；
+    WoB: $12\times12$ 网格，$N_{\text{part}}=512$, $N_{\text{ray}}=128$）}
     \label{fig:energy_div}
-\end{figure}
-
-\begin{figure}[H]
-    \centering
-    \includegraphics[width=0.95\textwidth]{report_results/wos_vs_wob_full.png}
-    \caption{WoS 与 WoB 最终状态的涡量场、速度大小、矢量场及动能/散度演化曲线。}
-    \label{fig:full_comparison}
 \end{figure}
 
 \begin{table}[H]
     \centering
-    \caption{WoS 与 WoB 方法在 15 步演化数值对比}
+    \caption{三种方案在 15 步演化数值对比}
     \label{tab:full_comparison}
     \rowcolors{2}{white}{lightgray}
-    \begin{tabular}{ccccc}
+    \small
+    \begin{tabular}{c|ccc|c}
         \toprule
-        \textbf{方法} & \textbf{初始动能} & \textbf{最终动能} & \textbf{平均 $|\nabla\cdot\boldsymbol{u}|$} & \textbf{趋势} \\
+        \textbf{方案} & \textbf{初KE} & \textbf{终KE} & \textbf{均$|\nabla\cdot\boldsymbol{u}|$} & \textbf{趋势} \\
         \midrule
-        WoS 压力 Poisson & 19.0 & 447.4 & 8.13 & 非物理增长（散度爆炸）\\
-        WoB 特解法 & 18.4 & 1.5 & 0.18 & 正常衰减 \\
+        WoS 默认 & 20.2 & 131.1 & 5.83 & 散度爆炸\\
+        WoS 修复 & 10.2 & 0.2 & 0.12 & 稳定（精度低）\\
+        WoB & 17.8 & 1.5 & 0.16 & 稳定\\
         \bottomrule
     \end{tabular}
 \end{table}
 
-图 \ref{fig:energy_div} 和表 \ref{tab:full_comparison} 揭示了两种方法的根本差异：
+图 \ref{fig:energy_div} 和表 \ref{tab:full_comparison} 揭示了三种方案的根本差异：
 
 \begin{itemize}
-    \item \textbf{WoS 方法}的动能呈现非物理增长（19.0 $\to$ 447.4），散度误差从 0.64 飙升至平均 8.13。这验证了前文的分析：WoS 压力 Poisson 求解后，$\nabla p$ 的有限差分将残余噪声放大约 $1/(2h)$ 倍，放大的噪声破坏散度约束，被破坏的散度在下一步又作为更强的 Poisson 源项，形成 \textbf{正反馈发散}。
+    \item \textbf{WoS 默认}（$12\times12$, $N_{\text{walk}}=512$）的动能呈非物理增长（20.2 $\to$ 131.1），散度误差平均 5.83。$\nabla p$ 的有限差分将残余噪声放大 $\sim 1/(2h) \approx 2.75$ 倍，形成 \textbf{正反馈发散}。
 
-    \item \textbf{WoB 方法}的动能从 18.4 单调衰减至 1.5，散度误差从初始的 0.75 稳步下降至平均 0.18。尽管其单步降散度能力较弱（表 \ref{tab:single_step}），但 WoB 的投影噪声不会在时间推进中累积放大。这是因为 WoB 的特解 $p_p$ 通过体积分直接估计 $p$ 值，$\nabla p$ 的差分仅作用于经过平滑的 $p$ 场，不存在 WoS 中"源项本身已含差分噪声"的问题。本质上，WoB 的噪声是 \textbf{稳态的、步间独立}的，而 WoS 的噪声具有 \textbf{正反馈放大}特性。
+    \item \textbf{WoS 修复}（$10\times10$, $N_{\text{walk}}=4096$）通过降低网格分辨率（$1/(2h) \approx 2.25$）和增加 8 倍采样实现了稳定，动能正常衰减（10.2 $\to$ 0.2），散度平均 0.12。但代价显著：粗网格导致初始动能从 20.2 降至 10.2（丢失高频涡结构），且计算量增加 8 倍。该实验验证了 WoS 的不稳定性是\textbf{可修复的定量问题}，但修复的精度-效率权衡劣于 WoB。
+
+    \item \textbf{WoB}（$12\times12$, $N_{\text{part}}=512, N_{\text{ray}}=128$）在不牺牲网格精度的前提下实现稳定，动能 17.8 $\to$ 1.5，散度平均 0.16。尽管单步降散度较弱，但 WoB 的投影噪声步间独立，不构成正反馈。
 \end{itemize}
 
 \subsection{讨论}
