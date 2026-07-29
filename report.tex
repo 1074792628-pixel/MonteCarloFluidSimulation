@@ -266,9 +266,9 @@ WoS 在单步投影上表现优于 WoB，这是因为 WoS 的采样策略直接�
 
 \begin{figure}[H]
     \centering
-    \includegraphics[width=0.95\textwidth]{report_results/three_way_comparison.png}
-    \caption{三种方案的动能与散度误差演化对比。
-    （$\Delta t=0.03$, $\nu=0.05$。WoS 默认: $12\times12$ 网格，$N_{\text{walk}}=512$；
+    \includegraphics[width=0.95\textwidth]{report_results/two_way_comparison.png}
+    \caption{WoS 修复与 WoB 的动能与散度误差演化对比。
+    （$\Delta t=0.03$, $\nu=0.05$。
     WoS 修复: $10\times10$ 网格，$N_{\text{walk}}=4096$，$\sigma=0.5$；
     WoB: $12\times12$ 网格，$N_{\text{part}}=512$, $N_{\text{ray}}=128$）}
     \label{fig:energy_div}
@@ -284,22 +284,21 @@ WoS 在单步投影上表现优于 WoB，这是因为 WoS 的采样策略直接�
         \toprule
         \textbf{方案} & \textbf{初KE} & \textbf{终KE} & \textbf{均$|\nabla\cdot\boldsymbol{u}|$} & \textbf{趋势} \\
         \midrule
-        WoS 默认 & 20.2 & 131.1 & 5.83 & 散度爆炸\\
-        WoS 修复 & 10.2 & 0.2 & 0.12 & 稳定（精度低）\\
-        WoB & 17.8 & 1.5 & 0.16 & 稳定\\
+        WoS 修复（10$\times$10, 4096行走） & 10.2 & 0.2 & 0.12 & 稳定（精度较低）\\
+        WoB（12$\times$12, 512特解+128射线） & 17.8 & 1.5 & 0.16 & 稳定\\
         \bottomrule
     \end{tabular}
 \end{table}
 
-图 \ref{fig:energy_div} 和表 \ref{tab:full_comparison} 揭示了三种方案的根本差异：
+图 \ref{fig:energy_div} 和表 \ref{tab:full_comparison} 揭示了两种可行方案的特点：
 
 \begin{itemize}
-    \item \textbf{WoS 默认}（$12\times12$, $N_{\text{walk}}=512$）的动能呈非物理增长（20.2 $\to$ 131.1），散度误差平均 5.83。$\nabla p$ 的有限差分将残余噪声放大 $\sim 1/(2h) \approx 2.75$ 倍，形成 \textbf{正反馈发散}。
+    \item \textbf{WoS 修复}（$10\times10$, $N_{\text{walk}}=4096$）通过降低网格分辨率（$1/(2h) \approx 2.25$）和增加 8 倍采样实现稳定，动能正常衰减（10.2 $\to$ 0.2），散度平均 0.12。但代价是粗网格丢失高频涡结构（初始动能仅 10.2，远低于理论值 18.4），且计算量是默认 WoS 的 8 倍。
 
-    \item \textbf{WoS 修复}（$10\times10$, $N_{\text{walk}}=4096$）通过降低网格分辨率（$1/(2h) \approx 2.25$）和增加 8 倍采样实现了稳定，动能正常衰减（10.2 $\to$ 0.2），散度平均 0.12。但代价显著：粗网格导致初始动能从 20.2 降至 10.2（丢失高频涡结构），且计算量增加 8 倍。该实验验证了 WoS 的不稳定性是\textbf{可修复的定量问题}，但修复的精度-效率权衡劣于 WoB。
-
-    \item \textbf{WoB}（$12\times12$, $N_{\text{part}}=512, N_{\text{ray}}=128$）在不牺牲网格精度的前提下实现稳定，动能 17.8 $\to$ 1.5，散度平均 0.16。尽管单步降散度较弱，但 WoB 的投影噪声步间独立，不构成正反馈。
+    \item \textbf{WoB}（$12\times12$, $N_{\text{part}}=512, N_{\text{ray}}=128$）在不牺牲网格精度的前提下实现稳定，动能 17.8 $\to$ 1.5，散度平均 0.16。尽管单步降散度较弱，但 WoB 的投影噪声步间独立，不构成正反馈，在长时间演化中稳定性优于 WoS。
 \end{itemize}
+
+作为参照，默认参数 WoS（$12\times12$, $N_{\text{walk}}=512$）的动能呈非物理增长（20.2 $\to$ 131.1），散度平均 5.83，说明 $\nabla p$ 的有限差分放大是不稳定的根源。
 
 \subsection{讨论}
 
