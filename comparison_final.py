@@ -37,7 +37,7 @@ def run_comparison(grid_res=12, n_walks=256, n_steps=20, dt=0.04, nu=0.05,
 
     # Initialize simulations
     sim22 = FluidSim2022N(grid_res, nu, dt, n_walks, has_obs, ox, oy, orad)
-    sim24 = FluidSimStream(grid_res, nu, dt, n_walks, has_obs, ox, oy, orad)
+    sim_sf = FluidSimStream(grid_res, nu, dt, n_walks, has_obs, ox, oy, orad)
 
     vel0 = taylor_green_vortex(grid_res, nu)
     if has_obs:
@@ -50,59 +50,59 @@ def run_comparison(grid_res=12, n_walks=256, n_steps=20, dt=0.04, nu=0.05,
                     vel0[i, j] = 0.0
 
     sim22.set_velocity(vel0.copy())
-    sim24.set_velocity(vel0.copy())
+    sim_sf.set_velocity(vel0.copy())
 
-    e22, e24 = [], []
-    d22, d24 = [], []
+    e22, e_sf = [], []
+    d22, d_sf = [], []
     times = []
 
     print(f"\nGrid: {grid_res}x{grid_res} | Walks: {n_walks} | Steps: {n_steps}")
-    print(f"{'Step':>5} | {'KE_2022':>9} {'KE_2024':>9} | {'Div_2022':>9} {'Div_2024':>9} | {'Time':>6}")
+    print(f"{'Step':>5} | {'KE_Press':>9} {'KE_StrFn':>9} | {'Div_Press':>9} {'Div_StrFn':>9} | {'Time':>6}")
     print("-" * 60)
 
     for step in range(n_steps):
         t0 = time.time()
         sim22.step()
         ta = time.time()
-        sim24.step()
+        sim_sf.step()
         tb = time.time()
         times.append((ta - t0, tb - ta))
 
         e22.append(sim22.kinetic_energy())
-        e24.append(sim24.kinetic_energy())
+        e_sf.append(sim_sf.kinetic_energy())
         d22.append(sim22.divergence_error())
-        d24.append(sim24.divergence_error())
+        d_sf.append(sim_sf.divergence_error())
 
         if step % max(1, n_steps // 5) == 0 or step == n_steps - 1:
-            print(f"{step:5d} | {e22[-1]:9.2f} {e24[-1]:9.2f} | {d22[-1]:9.6f} {d24[-1]:9.6f} | {tb-t0:6.1f}s")
+            print(f"{step:5d} | {e22[-1]:9.2f} {e_sf[-1]:9.2f} | {d22[-1]:9.6f} {d_sf[-1]:9.6f} | {tb-t0:6.1f}s")
 
     # Generate comparison figures
-    _plot_results(sim22, sim24, e22, e24, d22, d24, out_dir)
+    _plot_results(sim22, sim_sf, e22, e_sf, d22, d_sf, out_dir)
 
     print(f"\n=== Summary ===")
     print(f"2022 (Pressure Poisson WoS):")
     print(f"  Final KE = {e22[-1]:.2f}, Mean|div| = {np.mean(d22):.6f}")
     print(f"  Time: {sim22.stats['total_time']:.1f}s ({sum(t[0] for t in times):.1f}s)")
-    print(f"2024 (Stream function WoS):")
-    print(f"  Final KE = {e24[-1]:.2f}, Mean|div| = {np.mean(d24):.6f}")
-    print(f"  Time: {sim24.stats['total_time']:.1f}s ({sum(t[1] for t in times):.1f}s)")
+    print(f"Stream fn (based on 2022 boundary handling):")
+    print(f"  Final KE = {e_sf[-1]:.2f}, Mean|div| = {np.mean(d_sf):.6f}")
+    print(f"  Time: {sim_sf.stats['total_time']:.1f}s ({sum(t[1] for t in times):.1f}s)")
 
     # Save data
     np.savez(os.path.join(out_dir, 'results.npz'),
-             vel22=sim22.velocity, vel24=sim24.velocity,
-             curl22=sim22.vorticity(), curl24=sim24.vorticity(),
-             e22=e22, e24=e24, d22=d22, d24=d24)
+             vel22=sim22.velocity, vel_sf=sim_sf.velocity,
+             curl22=sim22.vorticity(), curl_sf=sim_sf.vorticity(),
+             e22=e22, e_sf=e_sf, d22=d22, d_sf=d_sf)
     print(f"\nResults saved to '{out_dir}/'")
 
 
-def _plot_results(sim22, sim24, e22, e24, d22, d24, out_dir):
+def _plot_results(sim22, sim_sf, e22, e_sf, d22, d_sf, out_dir):
     fig, axes = plt.subplots(2, 3, figsize=(15, 10))
     vmax_22 = max(abs(sim22.vorticity()).max(), 1e-6)
-    vmax_24 = max(abs(sim24.vorticity()).max(), 1e-6)
-    vmax = max(vmax_22, vmax_24)
+    vmax_sf = max(abs(sim_sf.vorticity()).max(), 1e-6)
+    vmax = max(vmax_22, vmax_sf)
 
-    for row, (sim, name) in enumerate([(sim22, '2022: WoS Pressure-Poisson'),
-                                        (sim24, '2024: WoS Stream Function')]):
+    for row, (sim, name) in enumerate([(sim22, 'Pressure-Poisson (2022)'),
+                                        (sim_sf, 'Stream Function (2022 boundary method)')]):
         axes[row, 0].imshow(sim.vorticity().T, origin='lower', cmap='RdBu_r',
                             vmin=-vmax, vmax=vmax, extent=[-1, 1, -1, 1])
         axes[row, 0].set_title(f'{name}\nVorticity')
@@ -127,24 +127,24 @@ def _plot_results(sim22, sim24, e22, e24, d22, d24, out_dir):
     # Energy & divergence
     fig, axes = plt.subplots(1, 3, figsize=(15, 4))
     axes[0].plot(e22, 'b.-', label='2022 (Pressure)')
-    axes[0].plot(e24, 'r.-', label='2024 (Stream fn)')
+    axes[0].plot(e_sf, 'r.-', label='Stream fn')
     axes[0].set_xlabel('Step'); axes[0].set_ylabel('KE'); axes[0].legend()
     axes[0].set_title('Kinetic Energy')
 
     axes[1].plot(d22, 'b.-', label='2022')
-    axes[1].plot(d24, 'r.-', label='2024')
+    axes[1].plot(d_sf, 'r.-', label='Stream fn')
     axes[1].set_xlabel('Step'); axes[1].set_ylabel('Mean |div u|')
     axes[1].legend(); axes[1].set_title('Divergence Error')
     axes[1].set_yscale('log')
 
     # Side-by-side vorticity at final time
     curl22 = sim22.vorticity()
-    curl24 = sim24.vorticity()
-    diff = abs(curl22) - abs(curl24)
+    curl_sf = sim_sf.vorticity()
+    diff = abs(curl22) - abs(curl_sf)
     dmax = max(abs(diff).max(), 1e-6)
     im = axes[2].imshow(diff.T, origin='lower', cmap='RdBu_r',
                          vmin=-dmax, vmax=dmax, extent=[-1, 1, -1, 1])
-    axes[2].set_title('|ω_2022| - |ω_2024|')
+    axes[2].set_title('|ω_pressure| - |ω_streamfn|')
     plt.colorbar(im, ax=axes[2])
 
     plt.tight_layout()
@@ -153,7 +153,7 @@ def _plot_results(sim22, sim24, e22, e24, d22, d24, out_dir):
 
 
 if __name__ == '__main__':
-    parser = argparse.ArgumentParser(description='2022 vs 2024 Monte Carlo Fluids')
+    parser = argparse.ArgumentParser(description='Pressure Poisson vs Stream Function Monte Carlo Fluids')
     parser.add_argument('--grid', type=int, default=10, help='Grid resolution')
     parser.add_argument('--walks', type=int, default=256, help='MC walks per point')
     parser.add_argument('--steps', type=int, default=10, help='Time steps')
@@ -164,7 +164,7 @@ if __name__ == '__main__':
     args = parser.parse_args()
 
     print("=" * 55)
-    print("MC Fluids: 2022 (Pressure Poisson) vs 2024 (Stream Function)")
+    print("MC Fluids: Pressure Poisson (2022) vs Stream Function (2022 boundary method)")
     print("Using Numba-accelerated Walk-on-Spheres")
     print("=" * 55)
 

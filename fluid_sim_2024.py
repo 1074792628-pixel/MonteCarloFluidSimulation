@@ -1,13 +1,14 @@
 """
-2024 Paper: "Velocity-Based Monte Carlo Fluids"
-  Sugimoto, Batty, Hachisuka (SIGGRAPH 2024)
+Stream function projection variant (based on 2022 paper's boundary handling)
+  Rioux-Lavoie, Sugimoto et al. (SIGGRAPH 2022)
 
-Velocity-based Monte Carlo approach:
-  1. Semi-Lagrangian advection
-  2. WoS diffusion: ∂u/∂t = ν∇²u
-  3. Stream function projection via WoS Poisson:
-     ω = ∇×u,  ∇²ψ = -ω,  u_proj = ∇×ψ
-  This directly yields divergence-free velocity without an explicit pressure solve.
+The 2022 paper uses stream function ψ for boundary condition handling:
+∇²ψ = -ω, then u = ∇×ψ.
+This file applies the same stream function idea in a velocity-based
+operator splitting pipeline (advection → diffusion → projection).
+
+Note: This is NOT the 2024 "Velocity-Based Monte Carlo Fluids" method.
+The 2024 paper uses pressure Poisson projection (∇²p = ∇·u*) with WoB.
 """
 
 import numpy as np
@@ -16,7 +17,7 @@ from wos_core import (wos_poisson_2d, divergence_2d, gradient_2d, curl_2d,
                        semi_lagrangian_advect)
 
 
-class FluidSim2024:
+class FluidSimStreamFn:
     def __init__(self, domain, grid_res=32, nu=0.1, dt=0.05, n_walks=128):
         self.domain = domain
         self.res = grid_res
@@ -54,7 +55,7 @@ class FluidSim2024:
         u_diff = gaussian_smooth(u_diff, sigma=0.4)
         self.stats["diffusion_steps"] += 1
 
-        # 3. Stream function projection (2024 key innovation)
+        # 3. Stream function projection (from 2022 paper's boundary handling)
         omega = curl_2d(u_diff[..., 0], u_diff[..., 1], self.h)
 
         def src(p):

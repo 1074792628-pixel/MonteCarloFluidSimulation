@@ -54,13 +54,16 @@ class FluidSim2022N:
         for c in range(2):
             u_diff[..., c] = gs(u_diff[..., c], sigma=0.3, mode='reflect')
 
-        # Enforce no-slip
+        # Enforce no-slip on boundary
         for i in range(res):
             for j in range(res):
-                d = (boundary_dist_rect_obs(self.X[i,j], self.Y[i,j], self.ox, self.oy, self.orad)
-                     if self.has_obs else boundary_dist_rect_only(self.X[i,j], self.Y[i,j]))
-                if d < 0:
+                x, y = self.X[i, j], self.Y[i, j]
+                if abs(x) >= 1.0 - 1e-8 or abs(y) >= 1.0 - 1e-8:
                     u_diff[i, j] = 0.0
+                elif self.has_obs:
+                    d = boundary_dist_rect_obs(x, y, self.ox, self.oy, self.orad)
+                    if d < 0:
+                        u_diff[i, j] = 0.0
 
         # 3. Numba WoS pressure Poisson
         div = divergence_2d_numba(u_diff[..., 0], u_diff[..., 1], h)
@@ -77,13 +80,16 @@ class FluidSim2022N:
         u_diff[..., 0] -= px
         u_diff[..., 1] -= py
 
-        # Enforce no-slip
+        # Enforce no-slip on boundary
         for i in range(res):
             for j in range(res):
-                d = (boundary_dist_rect_obs(self.X[i,j], self.Y[i,j], self.ox, self.oy, self.orad)
-                     if self.has_obs else boundary_dist_rect_only(self.X[i,j], self.Y[i,j]))
-                if d < 0:
+                x, y = self.X[i, j], self.Y[i, j]
+                if abs(x) >= 1.0 - 1e-8 or abs(y) >= 1.0 - 1e-8:
                     u_diff[i, j] = 0.0
+                elif self.has_obs:
+                    d = boundary_dist_rect_obs(x, y, self.ox, self.oy, self.orad)
+                    if d < 0:
+                        u_diff[i, j] = 0.0
 
         self.velocity = u_diff
         self.time += self.dt

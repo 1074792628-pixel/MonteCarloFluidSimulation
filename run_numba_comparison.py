@@ -1,5 +1,5 @@
 """
-Numba-accelerated comparison: 2022 vs Stream Monte Carlo Fluids
+Numba-accelerated comparison: Pressure Poisson (2022) vs Stream Function (2022 boundary method)
 """
 import numpy as np, time, os, argparse
 import matplotlib
@@ -29,12 +29,12 @@ def run_test(grid_res, n_walks, n_steps, dt, nu, out_dir, has_obs=False,
                     vel0[i, j] = 0.0
 
     sim22 = FluidSim2022N(grid_res, nu, dt, n_walks, has_obs, ox, oy, orad)
-    simStream = FluidSimStream(grid_res, nu, dt, n_walks, has_obs, ox, oy, orad)
+    sim_sf = FluidSimStream(grid_res, nu, dt, n_walks, has_obs, ox, oy, orad)
     sim22.set_velocity(vel0.copy())
-    simStream.set_velocity(vel0.copy())
+    sim_sf.set_velocity(vel0.copy())
 
-    e22, e24 = [], []
-    d22, d24 = [], []
+    e22, e_sf = [], []
+    d22, d_sf = [], []
 
     print(f"\nGrid: {grid_res}x{grid_res} | Walks: {n_walks} | Steps: {n_steps} | dt={dt} | nu={nu}")
     print(f"{'Step':>5} | {'KE22':>8} {'KEsf':>8} | {'Div22':>9} {'Divsf':>9} | Time")
@@ -44,21 +44,21 @@ def run_test(grid_res, n_walks, n_steps, dt, nu, out_dir, has_obs=False,
         t0 = time.time()
         sim22.step()
         t22 = time.time() - t0
-        simStream.step()
-        t24 = time.time() - t22 - t0
+        sim_sf.step()
+        t_sf = time.time() - t22 - t0
 
         e22.append(sim22.kinetic_energy())
-        e24.append(simStream.kinetic_energy())
+        e_sf.append(sim_sf.kinetic_energy())
         d22.append(sim22.divergence_error())
-        d24.append(simStream.divergence_error())
+        d_sf.append(sim_sf.divergence_error())
 
         if step % 5 == 0 or step == n_steps - 1:
-            print(f"{step:5d} | {e22[-1]:8.2f} {e24[-1]:8.2f} | {d22[-1]:9.6f} {d24[-1]:9.6f} | {t22+t24:.1f}s")
+            print(f"{step:5d} | {e22[-1]:8.2f} {e_sf[-1]:8.2f} | {d22[-1]:9.6f} {d_sf[-1]:9.6f} | {t22+t_sf:.1f}s")
 
     # Final visualization
     fig, axes = plt.subplots(2, 3, figsize=(15, 10))
-    for row, (sim, name) in enumerate([(sim22, '2022: Pressure Poisson'),
-                                        (simStream, 'Stream: Stream Function')]):
+    for row, (sim, name) in enumerate([(sim22, 'Pressure Poisson (2022)'),
+                                        (sim_sf, 'Stream Function (2022 boundary method)')]):
         curl = sim.vorticity()
         speed = np.sqrt(sim.velocity[..., 0]**2 + sim.velocity[..., 1]**2)
         vmax = max(abs(curl).max(), 1e-6)
@@ -86,13 +86,13 @@ def run_test(grid_res, n_walks, n_steps, dt, nu, out_dir, has_obs=False,
 
     # Energy and divergence plots
     fig, axes = plt.subplots(1, 2, figsize=(12, 4))
-    axes[0].plot(e22, label='2022 (Pressure)', marker='.')
-    axes[0].plot(e24, label='Stream (Stream fn)', marker='.')
+    axes[0].plot(e22, label='Pressure Poisson', marker='.')
+    axes[0].plot(e_sf, label='Stream Function', marker='.')
     axes[0].set_xlabel('Step'); axes[0].set_ylabel('KE'); axes[0].legend()
     axes[0].set_title('Kinetic Energy')
 
-    axes[1].plot(d22, label='2022', marker='.')
-    axes[1].plot(d24, label='Stream', marker='.')
+    axes[1].plot(d22, label='Pressure Poisson', marker='.')
+    axes[1].plot(d_sf, label='Stream Function', marker='.')
     axes[1].set_xlabel('Step'); axes[1].set_ylabel('Mean |div|')
     axes[1].legend(); axes[1].set_title('Divergence Error')
     axes[1].set_yscale('log')
@@ -102,13 +102,13 @@ def run_test(grid_res, n_walks, n_steps, dt, nu, out_dir, has_obs=False,
     plt.close()
 
     np.savez(os.path.join(out_dir, 'results.npz'),
-             vel22=sim22.velocity, vel24=simStream.velocity,
-             e22=e22, e24=e24, d22=d22, d24=d24)
+             vel22=sim22.velocity, vel_sf=sim_sf.velocity,
+             e22=e22, e_sf=e_sf, d22=d22, d_sf=d_sf)
 
     print(f"\n=== Summary ===")
-    print(f"2022: Final KE={e22[-1]:.2f}, Mean|div|={np.mean(d22):.6f}")
-    print(f"Stream: Final KE={e24[-1]:.2f}, Mean|div|={np.mean(d24):.6f}")
-    print(f"2022 time: {sim22.stats['total_time']:.1f}s, Stream time: {simStream.stats['total_time']:.1f}s")
+    print(f"Pressure Poisson: Final KE={e22[-1]:.2f}, Mean|div|={np.mean(d22):.6f}")
+    print(f"Stream Function:  Final KE={e_sf[-1]:.2f}, Mean|div|={np.mean(d_sf):.6f}")
+    print(f"Pressure Poisson time: {sim22.stats['total_time']:.1f}s, Stream Function time: {sim_sf.stats['total_time']:.1f}s")
 
 
 if __name__ == '__main__':
@@ -123,7 +123,7 @@ if __name__ == '__main__':
     args = parser.parse_args()
 
     print("=" * 50)
-    print("Monte Carlo Fluids: 2022 vs Stream (Numba)")
+    print("Monte Carlo Fluids: Pressure Poisson vs Stream Function (Numba)")
     print("=" * 50)
     run_test(args.grid, args.walks, args.steps, args.dt, args.nu,
              args.out, has_obs=args.obs)

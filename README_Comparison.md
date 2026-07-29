@@ -1,13 +1,15 @@
-# Monte Carlo 流体仿真方法对比: 2022 vs 2024
+# Monte Carlo 流体仿真方法对比
 
 ## 核心算法差异
 
-| 步骤 | 2022 (Rioux-Lavoie et al.) | 2024 (Sugimoto et al.) |
-|------|---------------------------|------------------------|
-| **平流** | 半拉格朗日法 (相同) | 半拉格朗日法 (相同) |
-| **扩散** | WoS 蒙特卡洛 ∂u/∂t = ν∇²u | WoS 蒙特卡洛 ∂u/∂t = ν∇²u |
-| **投影** | 压力泊松方程: ∇²p = ∇·u → u = u* - ∇p | 流函数泊松方程: ∇²ψ = -ω → u = ∇×ψ |
-| **状态** | 中间速度 u* → 修正 ∇p | 直接求解流函数 ψ → 重建速度 |
+| 方法 | 投影方式 | 来源 |
+|------|---------|------|
+| **压力泊松** | ∇²p = ∇·u → u = u* - ∇p | 2022 论文 (Rioux-Lavoie et al.) |
+| **流函数** | ∇²ψ = -ω → u = ∇×ψ | 2022 论文的边界处理方法 |
+| **速度法** | 压力泊松 + Walk-on-Boundary | 2024 论文 (Sugimoto et al.) |
+
+> 注意：流函数投影来自 **2022 年论文**（用于边界条件处理），**不是** 2024 年论文的方法。
+> 真正的 2024 "Velocity-Based Monte Carlo Fluids" 使用压力泊松投影 + Walk-on-Boundary。
 
 ## 文件说明
 
@@ -15,10 +17,11 @@
 |------|------|
 | `wos_core.py` | 纯 Python WoS 求解器 (慢, 用于教学) |
 | `numba_wos.py` | Numba JIT 加速 WoS 求解器 (快 50-100x) |
-| `fluid_sim_2022.py` | 2022 方法 (纯 Python) |
-| `fluid_sim_2024.py` | 2024 方法 (纯 Python) |
-| `fluid_sim_2022_numba.py` | 2022 方法 (Numba 加速) |
-| `fluid_sim_2024_numba.py` | 2024 方法 (Numba 加速) |
+| `fluid_sim_2022.py` | 压力泊松投影 (纯 Python) |
+| `fluid_sim_2024.py` | 流函数投影 (纯 Python) — 源自 2022 边界处理方法 |
+| `fluid_sim_2022_numba.py` | 压力泊松投影 (Numba 加速) |
+| `fluid_sim_stream_numba.py` | 流函数投影 (Numba 加速) — 源自 2022 边界处理方法 |
+| `fluid_sim_2024_wob.py` | 使用压力泊松近似 2024 方法的 WoB 投影 |
 | `comparison_final.py` | **主对比程序** (推荐使用) |
 | `run_comparison.py` | 纯 Python 对比 (旧) |
 
@@ -71,18 +74,24 @@ make -j8
 
 ## 方法论说明
 
-**2022 方法** 的核心是算子分裂:
+**压力泊松方法** (2022 论文主算法):
 1. 平流: 用半拉格朗日法更新速度场
 2. 扩散: 用 Walk-on-Spheres 求解热方程 ∂u/∂t = ν∇²u
 3. 投影: 求解压力泊松方程 ∇²p = ∇·u*, 然后修正 u = u* - ∇p
 
-**2024 方法** 的核心创新:
+**流函数方法** (来自 2022 论文的边界条件处理):
 1. 平流: 同上
-2. 扩散: 同上 (用 Walk-on-Boundary)
+2. 扩散: 同上
 3. 投影: 用流函数 ∇²ψ = -ω, 然后 u = ∇×ψ
    - 自动满足 ∇·u = 0
    - 避免了压力求解中的 Neumann 边界条件处理
-   - 在 GPU 实现中更加高效 (可直接在速度场上操作)
+   - 2022 论文中用于处理复杂障碍物边界的流函数方法
+
+**2024 速度法** (Sugimoto et al. "Velocity-Based Monte Carlo Fluids"):
+1. 平流: 同上
+2. 外力: 可添加浮力等
+3. 扩散: Walk-on-Boundary (非 WoS)
+4. 投影: 压力泊松 ∇²p = ∇·u*, 用 Walk-on-Boundary 求解
 
 ## 局限性 (Python 实现)
 

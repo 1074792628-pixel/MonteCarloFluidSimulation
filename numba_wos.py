@@ -253,6 +253,161 @@ def wos_diffuse_grid_numba(X, Y, field_u, field_v, res,
 
 
 
+# ═══════════════════════════════════════════════════════════════
+# Walk-on-Boundary (WoB) Poisson solver & Projection
+# Based on: Sugimoto et al. 2023 "Walk-on-Boundary Method"
+#           Sugimoto et al. 2024 "Velocity-Based MC Fluids"
+# ═══════════════════════════════════════════════════════════════
+
+@njit(cache=True)
+def _ray_intersect_rect_numba(x, y, dx, dy,
+                               xmin=-1.0, xmax=1.0,
+                               ymin=-1.0, ymax=1.0):
+    """
+    Ray-rectangle intersection in 2D.
+    Returns (t, wall_id) where:
+      t = distance from (x,y) to boundary in direction (dx,dy)
+      wall_id: 0=right, 1=left, 2=top, 3=bottom
+    If ray doesn't hit (shouldn't happen for interior point), t=inf, wall=-1.
+    """
+    t = 1e10
+    wall = -1
+    eps_d = 1e-12
+
+    if dx > eps_d:
+        tr = (xmax - x) / dx
+        if tr > 0:
+            yr = y + tr * dy
+            if ymin - 1e-10 <= yr <= ymax + 1e-10 and tr < t:
+                t, wall = tr, 0
+    elif dx < -eps_d:
+        tl = (xmin - x) / dx
+        if tl > 0:
+            yl = y + tl * dy
+            if ymin - 1e-10 <= yl <= ymax + 1e-10 and tl < t:
+                t, wall = tl, 1
+
+    if dy > eps_d:
+        tt = (ymax - y) / dy
+        if tt > 0:
+            xt = x + tt * dx
+            if xmin - 1e-10 <= xt <= xmax + 1e-10 and tt < t:
+                t, wall = tt, 2
+    elif dy < -eps_d:
+        tb = (ymin - y) / dy
+        if tb > 0:
+            xb = x + tb * dx
+            if xmin - 1e-10 <= xb <= xmax + 1e-10 and tb < t:
+                t, wall = tb, 3
+
+    return t, wall
+
+
+@njit(cache=True)
+def _wob_particular_point(x, y, f_grid, res, n_samples):
+    """
+    Estimate p_p(x) = ∫_Ω G(x,y') f(y') dV(y') via Monte Carlo.
+    G(x,y) = +(1/2π) * ln|x-y|  (2D free-space Green's function for ∇²G=δ)
+    Samples uniformly in [-1,1]².
+    """
+    area = 4.0
+    sum_val = 0.0
+    inv_2pi = 0.15915494309189535
+
+    for s in range(n_samples):
+        sx = np.random.uniform(-1.0, 1.0)
+        sy = np.random.uniform(-1.0, 1.0)
+        f_val = bilinear_interp(sx, sy, f_grid, res)
+        rx = x - sx
+        ry = y - sy
+        r2 = rx * rx + ry * ry
+        if r2 < 1e-20:
+            r2 = 1e-20
+        sum_val += inv_2pi * np.log(np.sqrt(r2)) * f_val
+
+    return sum_val * area / n_samples
+
+
+@njit(cache=True)
+def wob_poisson_point_numba(x, y, f_grid, res,
+                             n_particular=64, n_rays=32):
+    """
+    Walk-on-Boundary Poisson solve at a single point.
+    Solves ∇²p = f with p=0 on [-1,1]² rectangular boundary.
+
+    Uses: p(x) = p_p(x) - E[p_p(y_boundary)]
+    where:
+      p_p(x) = ∫_Ω G(x,y') f(y') dV(y')  (free-space particular solution)
+      y_boundary = first boundary hit point along a random ray from x
+      The expectation E[p_p(y_boundary)] corrects p_p to satisfy p=0 on ∂Ω.
+
+    This works because for a convex domain, the first-exit distribution
+    of a random ray equals the harmonic measure (Poisson kernel).
+    """
+    # Step 1: Particular solution p_p(x) via MC volume integration
+    p_p_x = _wob_particular_point(x, y, f_grid, res, n_particular)
+
+    # Step 2: WoB boundary correction
+    # p_h(x) = -E[p_p(y_boundary)]
+    # where y_boundary is the first ray exit to boundary
+    bc_sum = 0.0
+
+    for ray in range(n_rays):
+        theta = np.random.uniform(0.0, 2.0 * np.pi)
+        dx = np.cos(theta)
+        dy = np.sin(theta)
+
+        t, wall = _ray_intersect_rect_numba(x, y, dx, dy)
+
+        if t > 1e9 or wall < 0:
+            continue
+
+        bx = x + t * dx
+        by = y + t * dy
+
+        p_p_b = _wob_particular_point(bx, by, f_grid, res,
+                                       n_particular)
+        bc_sum += p_p_b  # accumulates p_p at boundary
+
+    bc_avg = bc_sum / n_rays
+
+    # p(x) = p_p(x) + p_h(x) = p_p(x) - E[p_p(y_boundary)]
+    return p_p_x - bc_avg
+
+
+@njit(parallel=True, cache=True)
+def wob_poisson_grid_numba(X, Y, f_grid, res,
+                            n_particular=64, n_rays=32):
+    """WoB Poisson solve for all grid points (parallel)."""
+    n_pts = X.shape[0] * X.shape[1]
+    result = np.zeros(X.shape, dtype=np.float64)
+
+    for idx in prange(n_pts):
+        i = idx // X.shape[1]
+        j = idx % X.shape[1]
+        x, y = X[i, j], Y[i, j]
+        val = wob_poisson_point_numba(x, y, f_grid, res,
+                                       n_particular, n_rays)
+        result[i, j] = val
+
+    return result
+
+
+@njit(cache=True)
+def wob_project_grid_numba(X, Y, u_grid, v_grid, res, h,
+                            n_particular=64, n_rays=32):
+    """
+    Full WoB velocity projection on a grid.
+    Returns (pressure, divergence_source) - smoothing and gradient
+    done externally to avoid Numba/scipy conflict.
+    """
+    div = divergence_2d_numba(u_grid, v_grid, h)
+
+    pressure = wob_poisson_grid_numba(X, Y, div, res,
+                                       n_particular, n_rays)
+    return pressure, div
+
+
 @njit(cache=True)
 def divergence_2d_numba(vx, vy, h):
     """Central difference divergence."""

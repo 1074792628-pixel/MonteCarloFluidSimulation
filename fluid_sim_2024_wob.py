@@ -1,5 +1,5 @@
 """
-2024 Paper: "Velocity-Based Monte Carlo Fluids"
+Approximation of 2024 "Velocity-Based Monte Carlo Fluids"
   Sugimoto, Batty, Hachisuka (SIGGRAPH 2024)
 
 Note: This Python implementation uses WoS pressure-Poisson projection
@@ -13,10 +13,9 @@ direct velocity projection, which requires:
 These features require the full GPU implementation via:
   https://github.com/rsugimoto/VelMCFluids
 
-For the Python comparison, both methods use the same WoS pressure-Poisson
-solver. The difference is in the mathematical formulation:
-  - 2022: Pressure Poisson ∇²p = ∇·u, then u = u* - ∇p
-  - 2024: Direct velocity estimation using WoB boundary integrals
+The key difference from the 2022 vorticity-based method is:
+  - 2022: Vorticity transport + Biot-Savart, with pressure Poisson projection
+  - 2024: Velocity-based operator splitting, pressure Poisson + WoB projection
 """
 
 import numpy as np

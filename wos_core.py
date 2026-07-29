@@ -1,10 +1,16 @@
 """
 Core Monte Carlo PDE solvers for fluid simulation comparison.
-Implements WoS (2022) and WoB/velocity-based (2024) approaches.
 
 References:
   [2022] Rioux-Lavoie et al. "A Monte Carlo Method for Fluid Simulation"
+        - Vorticity-based formulation
+        - Uses stream function ψ for boundary conditions (∇²ψ = -ω)
+        - WoS Poisson solver for pressure/stream function
+
   [2024] Sugimoto et al. "Velocity-Based Monte Carlo Fluids"
+        - Velocity-based formulation with operator splitting
+        - Uses Walk-on-Boundary (WoB) for projection
+        - Not to be confused with the stream function method above
 """
 
 import numpy as np
