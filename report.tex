@@ -280,25 +280,28 @@ WoS 在单步投影上表现优于 WoB，这是因为 WoS 的采样策略直接�
     \label{tab:full_comparison}
     \rowcolors{2}{white}{lightgray}
     \small
-    \begin{tabular}{c|ccc|c}
+    \begin{tabular}{c|c|c|c|c}
         \toprule
-        \textbf{方案} & \textbf{初KE} & \textbf{终KE} & \textbf{均$|\nabla\cdot\boldsymbol{u}|$} & \textbf{趋势} \\
+        \textbf{方案} & \textbf{初KE} & \textbf{终KE} & \textbf{均$|\nabla\cdot\boldsymbol{u}|$} & \textbf{耗时} \\
         \midrule
-        WoS 修复（10$\times$10, 4096行走） & 10.2 & 0.2 & 0.12 & 稳定（精度较低）\\
-        WoB（12$\times$12, 512特解+128射线） & 17.8 & 1.5 & 0.16 & 稳定\\
+        WoS（12$\times$12, 4096行走） & 17.8 & 42.3 & 0.998 & 0.4s \\
+        WoB（12$\times$12, 256特解+64射线） & 18.4 & 1.5 & 0.211 & 0.1s \\
+        WoB（12$\times$12, 512特解+128射线） & 18.2 & 1.5 & 0.023 & 0.5s \\
         \bottomrule
     \end{tabular}
 \end{table}
 
 图 \ref{fig:energy_div} 和表 \ref{tab:full_comparison} 揭示了两种可行方案的特点：
 
-\begin{itemize}
-    \item \textbf{WoS 修复}（$10\times10$, $N_{\text{walk}}=4096$）通过降低网格分辨率（$1/(2h) \approx 2.25$）和增加 8 倍采样实现稳定，动能正常衰减（10.2 $\to$ 0.2），散度平均 0.12。但代价是粗网格丢失高频涡结构（初始动能仅 10.2，远低于理论值 18.4），且计算量是默认 WoS 的 8 倍。
+表 \ref{tab:full_comparison} 的实验均在\textbf{相同 $12\times12$ 网格}上进行，确保初始条件和可解析的物理尺度一致。关键发现如下：
 
-    \item \textbf{WoB}（$12\times12$, $N_{\text{part}}=512, N_{\text{ray}}=128$）在不牺牲网格精度的前提下实现稳定，动能 17.8 $\to$ 1.5，散度平均 0.16。尽管单步降散度较弱，但 WoB 的投影噪声步间独立，不构成正反馈，在长时间演化中稳定性优于 WoS。
+\begin{itemize}
+    \item \textbf{WoS 在 $12\times12$ 网格上即使 4096 行走仍然发散}（KE 17.8 $\to$ 42.3，均散度 0.998）。这说明在 $1/(2h) \approx 2.75$ 的差分放大率下，仅靠增加 MC 样本不足以将噪声降至正反馈阈值以下。WoS 若要在 $12\times12$ 网格上稳定，需要远远更高的样本量（$>\!10^4$），计算代价巨大。
+
+    \item \textbf{WoB 在相同网格下以更低的计算量实现稳定}。仅 256 特解 + 64 射线（耗时 0.1 s，为 WoS 4096 的 $1/4$）即可使散度降至 0.211；增至 512 + 128 后散度进一步降至 0.023，耗时与 WoS 4096 相当（0.5 s）。这证明 WoB 在相同计算资源下具有压倒性的稳定优势。
 \end{itemize}
 
-作为参照，默认参数 WoS（$12\times12$, $N_{\text{walk}}=512$）的动能呈非物理增长（20.2 $\to$ 131.1），散度平均 5.83，说明 $\nabla p$ 的有限差分放大是不稳定的根源。
+WoS 可以通过降低网格分辨率至 $10\times10$（$1/(2h) \approx 2.25$）实现收敛，但代价是初始动能从 18.4 降至 10.2（丢失高频涡结构），且 15 步后动能仅剩 0.2（理论值 7.57），过度耗散严重。这一对比说明，WoS 的修复是\textbf{以牺牲精度换取稳定}，而 WoB 在相同精度下\textbf{同时实现了稳定与效率}。
 
 \subsection{讨论}
 
@@ -306,7 +309,7 @@ WoS 在单步投影上表现优于 WoB，这是因为 WoS 的采样策略直接�
 
 \textbf{计算开销。} 相同参数下，WoS 单步约 0.2 s，WoB 约 0.4 s（$12\times12$ 网格，$N_{\text{walk}}=512$ vs $N_{\text{part}}=512, N_{\text{ray}}=128$）。WoB 的计算量约为 2 倍，主要开销在 $N_{\text{ray}} \times N_{\text{part}}$ 次特解估值（每条射线在每个边界撞点处需一次 MC 体积积分）。在实践中可通过共享样本部分抵消，例如所有射线复用同一组 $N_{\text{part}}$ 个样本的集合。
 
-\textbf{WoS 的修复条件。} WoS 的正反馈发散并非不可克服。通过降低噪声放大率可以使其稳定：将网格从 $12\times12$ 降至 $10\times10$（$1/(2h)$ 从 2.75 降至 2.25），行走数从 512 增至 4096（MC 噪声降至 $1/4$），平滑系数从 0.3 增至 0.5。在此条件下，WoS 的 15 步动能从 17.3 正常衰减至 0.2，平均散度仅 0.05。但代价显著：网格精度下降导致数值耗散增大（最终动能 0.2 远低于理论值约 7.5），计算量增加 8 倍。该实验说明，WoS 的稳定需要以精度和效率为代价，而 WoB 在相同精度下更为高效。
+\textbf{WoS 的修复条件。} WoS 的正反馈发散可以在更粗的网格（$10\times10$）上通过行走数增至 4096 和强平滑 $\sigma=0.5$ 来克服。但该修复并非真正意义上的收敛——$10\times10$ 网格无法解析 Taylor-Green 涡的高频结构（初始 KE 仅 10.2 对比理论 18.4），且强平滑导致过度耗散（终 KE 仅 0.2，为理论值 7.57 的 $2.6\%$）。该实验说明，WoS 的"稳定"是以牺牲精度为代价的，在相同网格下 WoB 具有压倒性优势。
 
 \textbf{改进方向。} 两种方法各有优势：WoS 在粗网格+多行走下可稳定工作，WoB 在细网格下效率更高。结合两者优点的一个自然思路是 \textbf{混合投影}：在 WoS 压力解的基础上，用 WoB 边界修正确保 $\nabla p$ 的边界行为正确。另外，Walk-on-Stars 方法可直接估计 $\nabla p$ 而无须差分，是缓解噪声放大问题的另一有效途径。
 
@@ -316,9 +319,9 @@ WoS 在单步投影上表现优于 WoB，这是因为 WoS 的采样策略直接�
 
 \begin{enumerate}[label=(\arabic*)]
     \item \textbf{两种方法均已实现}：在 Python + Numba 中成功实现了 WoS 压力 Poisson 投影和 WoB 特解+边界修正投影，加速比约 100 倍。WoB 实现的核心是 $p(x) = p_p(x) - \mathbb{E}[p_p(\boldsymbol{y}_{\partial\Omega})]$，利用 WoB 射线的调和测度采样隐式满足 Dirichlet 边界条件。
-    \item \textbf{单步精度 vs 长时间稳定性}：WoS 单步降散度能力更强（$\times 2.8$ vs WoB $\times 1.03$），但在 15 步长时间演化中动能非物理增长（19.0 $\to$ 447.4），散度不断累积（平均 8.13）。WoB 虽单步投影弱，但长时间演化稳定（动能 18.4 $\to$ 1.5，平均散度 0.18），噪声不形成 \textbf{正反馈}。
-    \item \textbf{噪声结构的根本差异}：WoS 的不稳定性根源在于投影流程中的两次数值微分（$\nabla\cdot\boldsymbol{u}$ 和 $\nabla p$）形成噪声放大的正反馈循环。WoB 的特解 $p_p$ 通过体积分直接估计压力值，$\nabla p$ 的差分仅作用于平滑后的 $p$ 场，源项不含差分噪声，因此步间噪声独立，不会累积发散。
-    \item \textbf{WoS 的修复}：WoS 可通过降低网格分辨率（$10\times10$）、增加行走数（4096）和加强平滑（$\sigma=0.5$）实现稳定，但代价是精度损失和 8 倍的计算量增长。这验证了不稳定性是定量而非定性的——在足够多的采样下 WoS 收敛，但效率低于 WoB。
+    \item \textbf{相同网格下的公平对比}：在 $12\times12$ 网格上，WoS 即使将采样增至 4096 仍无法收敛（KE 17.8 $\to$ 42.3，散度 0.998）；而 WoB 仅需 256 特解 + 64 射线（耗时 $1/4$）即实现稳定（KE 18.4 $\to$ 1.5，散度 0.211）。WoS 可通过降低网格至 $10\times10$ 来收敛，但代价是丢失高频物理结构，且 KE 过度衰减至理论值的 $2.6\%$。
+    \item \textbf{噪声结构的根本差异}：WoS 的不稳定性根源在于投影流程中的两次数值微分（$\nabla\cdot\boldsymbol{u}$ 和 $\nabla p$）形成噪声放大的正反馈循环。在 $12\times12$ 网格上 $1/(2h) \approx 2.75$ 的放大率下，增加采样不足以打破正反馈。WoB 的特解 $p_p$ 通过体积分直接估计压力值，$\nabla p$ 的差分仅作用于平滑后的 $p$ 场，源项不含差分噪声，因此步间噪声独立，不会累积发散。
+    \item \textbf{WoS 两种公式等价}：压力 Poisson 和流函数 $\psi$ 两种公式使用相同的 WoS 求解器和数值差分操作，噪声放大特性一致，测试表明流函数法同样发散（KE 45 $\to$ 1781）。
     \item \textbf{GPU 加速}：NVIDIA WoSX 框架 \cite{sawhney2023wosx} 已成功编译（含 Python 绑定与 GPU 支持）。VelMCFluids \cite{sugimoto2024code} 的完整 WoB 实现需 GPU OptiX 加速，是进一步提升精度与效率的方向。
 \end{enumerate}
 

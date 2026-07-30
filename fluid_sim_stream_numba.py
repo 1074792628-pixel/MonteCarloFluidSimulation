@@ -1,6 +1,6 @@
 """
 Stream function projection (for comparison with pressure-Poisson)
-âˆ‡Â²Ï?= -Ï‰, u = âˆ‡Ã—Ï?â†?automatically divergence-free
+Solves: nabla^2 psi = -omega, u = curl psi  (automatically divergence-free)
 """
 import numpy as np
 import time
