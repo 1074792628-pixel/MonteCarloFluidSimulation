@@ -290,15 +290,23 @@ WoS 在单步投影上表现优于 WoB，这是因为 WoS 的采样策略直接�
     \end{tabular}
 \end{table}
 
-图 \ref{fig:energy_div} 和表 \ref{tab:full_comparison} 揭示了两种可行方案的特点：
+图 \ref{fig:energy_div} 和表 \ref{tab:full_comparison} 总结了两种可行方案的特点。
+
+\textbf{WoS 为何修复后能收敛。} 正反馈发散由两个因素驱动：差分放大率 $1/(2h)$ 和 MC 采样噪声 $\propto 1/\sqrt{N_{\text{walk}}}$。修复方案三管齐下：(i) 网格从 $12\times12$ 降至 $10\times10$，$1/(2h)$ 从 2.75 降至 2.25，差分放大率降低 18\%；(ii) 行走数从 512 增至 4096，MC 噪声降至 $1/2.8$；(iii) 平滑系数从 0.3 增至 0.5，进一步压制差分前的残余噪声。三者的叠加效应使残余噪声降至正反馈阈值以下，从而收敛。
+
+\textbf{WoS 两种公式的对比。} 本实验中 WoS 投影实际有两种等价形式：(i) 压力 Poisson $\nabla^2 p = \nabla\cdot\boldsymbol{u}$，再用 $\boldsymbol{u} - \nabla p$ 修正速度（2022 论文主算法）；(ii) 流函数 Poisson $\nabla^2 \psi = -\omega$，再用 $\boldsymbol{u} = \nabla\times\psi$ 重建速度（来自 2022 论文的边界处理方法）。两者使用完全相同的 WoS Poisson 求解器，其区别仅在于如何从解恢复速度。由于均需数值差分（求 $\nabla p$ 或 $\nabla\times\psi$），两者的噪声放大特性相似，区别仅限于边界条件处理方式。
+
+\textbf{WoS 修复 vs WoB：精度差异。} 一个重要但容易被忽略的事实是：\textbf{WoS 修复的"收敛"是以过度耗散为代价的}。Taylor-Green 涡在 $\nu=0.05$、$t=0.45$（15 步）的理论动能应为 $18.4 \times e^{-4\pi^2\nu t} \approx 7.57$。对比两种方案：
 
 \begin{itemize}
-    \item \textbf{WoS 修复}（$10\times10$, $N_{\text{walk}}=4096$）通过降低网格分辨率（$1/(2h) \approx 2.25$）和增加 8 倍采样实现稳定，动能正常衰减（10.2 $\to$ 0.2），散度平均 0.12。但代价是粗网格丢失高频涡结构（初始动能仅 10.2，远低于理论值 18.4），且计算量是默认 WoS 的 8 倍。
+    \item \textbf{WoS 修复}（$10\times10$, $N_{\text{walk}}=4096$）的动能从 10.2 降至 \textbf{0.2}，仅为理论值的 \textbf{2.6\%}。粗网格丢失了高频涡结构（初始 KE 仅 10.2 而非 18.4），强平滑进一步消除了中频能量，导致严重过度耗散。
 
-    \item \textbf{WoB}（$12\times12$, $N_{\text{part}}=512, N_{\text{ray}}=128$）在不牺牲网格精度的前提下实现稳定，动能 17.8 $\to$ 1.5，散度平均 0.16。尽管单步降散度较弱，但 WoB 的投影噪声步间独立，不构成正反馈，在长时间演化中稳定性优于 WoS。
+    \item \textbf{WoB}（$12\times12$, $N_{\text{part}}=512$, $N_{\text{ray}}=128$）的动能从 17.8 降至 \textbf{1.5}，为理论值的 \textbf{19.8\%}。虽也有数值耗散，但网格精度高、平滑适中，保留了更多真实物理。
+
+    作为参照，默认参数 WoS（$12\times12$, $N_{\text{walk}}=512$）的动能呈非物理增长（20.2 $\to$ 131.1），散度平均 5.83。
 \end{itemize}
 
-作为参照，默认参数 WoS（$12\times12$, $N_{\text{walk}}=512$）的动能呈非物理增长（20.2 $\to$ 131.1），散度平均 5.83，说明 $\nabla p$ 的有限差分放大是不稳定的根源。
+因此，WoB 在相同或更少计算量下，实现了比 WoS 修复\textbf{更精确的稳定仿真}。WoS 修复虽有理论意义（证实不稳定性是可克服的定量问题），在实际应用中不具备竞争力。
 
 \subsection{讨论}
 
