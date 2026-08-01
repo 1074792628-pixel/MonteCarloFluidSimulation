@@ -1,4 +1,4 @@
-import os, time, numpy as np
+﻿import os, time, numpy as np
 import matplotlib; matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 from matplotlib.animation import FuncAnimation, PillowWriter
@@ -51,4 +51,4 @@ def animate_and_report(sim, total_time, output_dir, filename,
     anim = FuncAnimation(fig, update, frames=len(slices), interval=1000//fps, blit=True)
     anim.save(anim_path, writer=PillowWriter(fps=fps), dpi=dpi)
     plt.close(fig)
-    print(f'✅ {label}: anim saved to {anim_path}, report saved to {report_path}')
+    print(f'[OK] {label}: anim saved to {anim_path}, report saved to {report_path}')

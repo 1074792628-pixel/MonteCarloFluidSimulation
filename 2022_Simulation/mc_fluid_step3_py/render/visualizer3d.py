@@ -1,4 +1,4 @@
-import os
+﻿import os
 import time
 import numpy as np
 import matplotlib
@@ -57,7 +57,7 @@ def save_animation_3d(sim: Simulator3D, total_time: float = 1.0,
     total_wall = time.perf_counter() - start_wall
     avg_step_time = np.mean(step_times) if step_times else 0
 
-    print(f"\n⏱ 模拟完成，总耗时: {total_wall:.2f}s")
+    print(f"\n== 模拟完成，总耗时: {total_wall:.2f}s")
     print(f"   平均每步耗时: {avg_step_time*1000:.0f}ms")
 
     # ---------- 误差分析 ----------
@@ -111,5 +111,5 @@ def save_animation_3d(sim: Simulator3D, total_time: float = 1.0,
                          interval=1000 // fps, blit=True)
     anim_path = os.path.join(output_dir, filename)
     anim.save(anim_path, writer=PillowWriter(fps=fps), dpi=dpi)
-    print(f"✅ 动画已保存至: {anim_path}")
+    print(f"[OK] 动画已保存至: {anim_path}")
     plt.close(fig)

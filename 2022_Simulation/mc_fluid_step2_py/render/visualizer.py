@@ -1,4 +1,4 @@
-# render/visualizer.py
+﻿# render/visualizer.py
 import os
 import time
 import numpy as np
@@ -56,7 +56,7 @@ def save_animation(sim: Simulator, total_time: float = 10.0,
     sim_time = time.perf_counter() - start_time
     avg_step_time = sim_time / num_steps
 
-    print(f"\n⏱ 模拟完成，总耗时: {sim_time:.2f} 秒")
+    print(f"\n== 模拟完成，总耗时: {sim_time:.2f} 秒")
     print(f"   平均每步耗时: {avg_step_time*1000:.1f} 毫秒")
 
     # ---------- 误差分析 ----------
@@ -111,5 +111,5 @@ def save_animation(sim: Simulator, total_time: float = 10.0,
                          interval=1000 // fps, blit=True)
     output_path = os.path.join(output_dir, filename)
     anim.save(output_path, writer=PillowWriter(fps=fps), dpi=dpi)
-    print(f"✅ 动画已保存至: {output_path}")
+    print(f"[OK] 动画已保存至: {output_path}")
     plt.close(fig)
