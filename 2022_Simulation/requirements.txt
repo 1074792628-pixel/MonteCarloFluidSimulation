@@ -1,0 +1,7 @@
+# 核心依赖
+numpy>=1.21
+matplotlib>=3.5
+pillow>=9.0
+
+# 可选加速（numba 编译可提升 50~200 倍）
+numba>=0.55
