@@ -222,25 +222,27 @@ WoB 投影的核心是 $p(\boldsymbol{x}) = p_p(\boldsymbol{x}) - \mathbb{E}[p_p
 
 \subsection{实验对比}
 
+为对比两种方法的长时间演化行为，两者均在相同物理时长下运行：网格 $16\times16$、$\Delta t=0.03$、共 60 步（总时长 $t=1.8$），无粘（$\nu=0$）条件下从相同的 Taylor-Green 初始条件出发。
+
 \begin{figure}[H]
     \centering
-    \includegraphics[width=0.95\textwidth]{report_results/2022_vs_2024_algorithm.png}
-    \caption{2022 涡量法与 2024 速度法的动能演化对比（$16\times16$ 网格，无粘）。}
+    \includegraphics[width=0.95\textwidth]{report_results/2022_vs_2024_long.png}
+    \caption{2022 涡量法与 2024 速度法的长时间（$t=1.8$）动能与涡量演化对比。
+    上左：绝对动能；上右：归一化动能（无粘理想情况应恒为 1）；下左：最大涡量；下右：2022 最终涡量场。}
     \label{fig:ke_comparison}
 \end{figure}
 
 \begin{table}[H]
     \centering
-    \caption{2022 涡量法与 2024 速度法对比结果}
+    \caption{2022 涡量法与 2024 速度法长时间对比结果（$t=0\to1.8$）}
     \label{tab:2022_2024}
     \rowcolors{2}{white}{lightgray}
-    \begin{tabular}{c|ccc|c}
+    \begin{tabular}{c|cccc|c}
         \toprule
-        \textbf{方法} & \textbf{初KE} & \textbf{终KE} & \textbf{最大涡量终值} & \textbf{15步耗时} \\
+        \textbf{方法} & \textbf{初KE} & \textbf{终KE} & \textbf{KE衰减} & \textbf{$\omega_{\max}$终值} & \textbf{耗时} \\
         \midrule
-        2022 涡量法 (nmc=256) & 48.9 & 35.1 & 5.35 & 7.5 s \\
-        2022 涡量法 (nmc=512) & 50.3 & 30.6 & 5.48 & 11.2 s \\
-        2024 速度法 (256p+64r) & 44.9 & 24.2 & 3.44 & 0.4 s \\
+        2022 涡量法 (nmc=256) & 47.0 & 11.3 & $-76\%$ & 3.29 & 30.8 s \\
+        2024 速度法 (256p+64r) & 63.8 & 20.1 & $-68\%$ & 3.15 & 0.9 s \\
         \bottomrule
     \end{tabular}
 \end{table}
@@ -248,7 +250,7 @@ WoB 投影的核心是 $p(\boldsymbol{x}) = p_p(\boldsymbol{x}) - \mathbb{E}[p_p
 \begin{figure}[H]
     \centering
     \includegraphics[width=0.95\textwidth]{report_results/2022_2024_vorticity.png}
-    \caption{两种方法最终的涡量场对比。}
+    \caption{两种方法在 $t=1.8$ 时的涡量场对比。}
     \label{fig:vorticity_comparison}
 \end{figure}
 
@@ -257,18 +259,18 @@ WoB 投影的核心是 $p(\boldsymbol{x}) = p_p(\boldsymbol{x}) - \mathbb{E}[p_p
 从表 \ref{tab:2022_2024} 和图 \ref{fig:ke_comparison} 可以得出以下结论：
 
 \begin{itemize}
-    \item \textbf{物理量守恒}：2022 涡量法对最大涡量的保持更好（$\omega_{\max}$ 从 6.04 仅降至 5.35，保留 89\%），而 2024 速度法降至 3.44（保留 60\%）。这印证了涡量法直接演化涡量、由 Biot-Savart 重建速度的物理保真优势。
+    \item \textbf{计算效率（最显著的差异）}：2022 涡量法每步需为每个网格点执行全域 Biot-Savart 积分（256 次核函数评估），60 步耗时 \textbf{30.8 s}；2024 速度法借助网格缓存，仅需 \textbf{0.9 s}，快约 \textbf{34 倍}。这是涡量法最主要的实用短板。
 
-    \item \textbf{计算效率}：2022 涡量法每步需要为每个网格点执行全域 Biot-Savart 积分（$N$ 个采样），耗时 7.5--11.2 s；2024 速度法借助网格缓存的投影步骤，仅需 0.4 s，快约 \textbf{18--28 倍}。这是涡量法的主要短板。
+    \item \textbf{数值耗散}：在无粘条件下，两种方法的动能均显著衰减——涡量法 $-76\%$，速度法 $-68\%$。这表明两种方法的主要耗散来源都是半拉格朗日平流的插值误差和网格缓存分辨率，而非状态变量选择本身。长时间演化下两者的耗散行为趋于一致。
 
-    \item \textbf{稳定性}：两种方法在各自框架下均稳定运行。涡量法因速度由积分重建而无投影噪声问题；速度法依赖投影步骤，但 WoB 投影的噪声是步间独立的，不形成正反馈发散。
+    \item \textbf{涡量保持}：两种方法对最大涡量的保持相近（$\omega_{\max}$ 均降至初始的约 $54\%$）。涡量法直接演化涡量场，但 Biot-Savart 重建与插值同样引入耗散；速度法通过投影维持不可压缩性，涡量由速度场差分得到，耗散略大但量级接近。
 
-    \item \textbf{数值耗散}：两种方法在无粘条件下动能均衰减（涡量法 -28\%，速度法 -46\%），这是半拉格朗日平流插值和网格缓存的固有数值耗散。速度法的耗散更大，部分源于投影步骤的平滑处理。
+    \item \textbf{稳定性}：两种方法在各自框架下均稳定运行。涡量法速度由积分重建，天然满足 $\nabla\cdot\boldsymbol{u}=0$ 且无投影噪声反馈；速度法依赖 WoB 投影，但投影噪声步间独立，不形成正反馈发散。
 \end{itemize}
 
 \subsection{讨论}
 
-\textbf{2022 涡量法的优势与代价。} 涡量法的核心优势是\textbf{物理守恒性}：涡量直接作为状态变量演化，速度由积分重建，避免了压力投影引入的数值误差，也天然满足不可压缩性。其代价是 Biot-Savart 积分的计算开销——每次速度查询都需要遍历全域采样，在细网格上成本急剧上升。此外，涡量法在三维中需要处理涡拉伸项，且涡量-速度转换在非单连通区域面临调和场问题\cite{sugimoto2024}。
+\textbf{2022 涡量法的优势与代价。} 涡量法的核心优势是\textbf{天然不可压缩性}：速度由 Biot-Savart 积分重建，自动满足 $\nabla\cdot\boldsymbol{u}=0$，避免了投影步骤及其噪声。同时，涡量作为状态变量便于涡旋动力学分析。其主要代价是 Biot-Savart 积分的计算开销——每次速度查询需遍历全域采样，在细网格上成本急剧上升（实验中为速度法的 34 倍）。此外，涡量法在三维中需要处理涡拉伸项，且在非单连通区域面临调和场问题\cite{sugimoto2024}。
 
 \textbf{2024 速度法的优势与代价。} 速度法直接操作速度场，计算高效，且能自然融入浮力、PIC/FLIP、平流-反射等传统速度法技术。其代价是需要显式维持不可压缩性：投影步骤在有限 MC 采样下引入噪声，若采用 WoS 压力 Poisson + 有限差分梯度，噪声会形成正反馈发散；改用 WoB 特解投影后噪声步间独立，解决了这一问题，但数值耗散仍然较大。
 
@@ -280,8 +282,8 @@ WoB 投影的核心是 $p(\boldsymbol{x}) = p_p(\boldsymbol{x}) - \mathbb{E}[p_p
 
 \begin{enumerate}[label=(\arabic*)]
     \item \textbf{两种算法均已实现}：涡量法（涡量输运 + Biot-Savart + 流函数 WoS）和速度法（算子分裂 + WoB 投影）均可稳定运行。
-    \item \textbf{物理守恒}：涡量法对涡量/环量的保持优于速度法（$\omega_{\max}$ 保留 89\% vs 60\%），因其直接演化涡量且速度由积分重建。
-    \item \textbf{计算效率}：速度法快约 18--28 倍（0.4 s vs 7.5--11.2 s 每 15 步），网格缓存使投影步骤成本远低于全域 Biot-Savart 积分。
+    \item \textbf{计算效率}：速度法快约 \textbf{34 倍}（0.9 s vs 30.8 s，$16\times16$ 网格 60 步），网格缓存使投影步骤成本远低于全域 Biot-Savart 积分。这是两种方法最显著的实用差异。
+    \item \textbf{数值耗散相近}：在无粘条件下长时间演化（$t=1.8$）中，两者动能均衰减约 $68\%$--$76\%$，耗散主要源于半拉格朗日平流插值而非状态变量选择。
     \item \textbf{不可压缩性}：涡量法天然满足 $\nabla\cdot\boldsymbol{u}=0$，速度法依赖投影步骤；WoB 投影的步间独立噪声避免了 WoS 压力 Poisson + 有限差分的正反馈发散问题。
 \end{enumerate}
 
