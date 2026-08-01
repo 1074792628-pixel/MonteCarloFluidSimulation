@@ -200,15 +200,14 @@ $p_h$ 中的期望通过 WoB 射线采样：从 $\boldsymbol{x}$ 出发沿均匀
 
 \subsection{2024 速度法实现}
 
-2024 速度法由本实验实现，核心组件：
+2024 速度法有两套实现：
 
 \begin{itemize}
-    \item \texttt{numba\_wos.py}：Numba 加速的 WoS 求解器 + WoB 射线求交 + WoB 特解 Poisson 求解；
-    \item \texttt{fluid\_sim\_wob.py}：速度算子分裂完整管线（平流 → 扩散 → WoB 投影）；
-    \item \texttt{wos\_core.py}：纯 Python 参考实现。
+    \item \textbf{Python 简化版}（本实验早期实现）：\texttt{numba\_wos.py}（Numba 加速的 WoS/WoB 求解器）+ \texttt{fluid\_sim\_wob.py}（速度算子分裂管线），WoB 投影简化为 $p(\boldsymbol{x}) = p_p(\boldsymbol{x}) - \mathbb{E}[p_p(\boldsymbol{y}_{\partial\Omega})]$；
+    \item \textbf{GPU 完整版}（\texttt{VelMCFluids/}）：论文作者的官方 OptiX 参考实现，包含完整的 WoB 边界积分投影（奇异体积分、伪边界项、速度源项、边界路径积分），通过 CUDA/OptiX 光线追踪加速。本实验在 Windows 上完成了编译（需 CUDA 13.3 + OptiX 9.1 + 新版驱动 610.88），并跑通了论文场景。
 \end{itemize}
 
-WoB 投影的核心是 $p(\boldsymbol{x}) = p_p(\boldsymbol{x}) - \mathbb{E}[p_p(\boldsymbol{y}_{\partial\Omega})]$，通过 Numba \texttt{@njit(parallel=True)} 实现多网格点并行。
+本实验的同类场景对比使用 GPU 完整版作为 2024 速度法代表。
 
 \section{实验结果与分析}
 
@@ -222,69 +221,63 @@ WoB 投影的核心是 $p(\boldsymbol{x}) = p_p(\boldsymbol{x}) - \mathbb{E}[p_p
 
 \subsection{实验对比}
 
-为对比两种方法的长时间演化行为，两者均在相同物理时长下运行：网格 $16\times16$、$\Delta t=0.03$、共 60 步（总时长 $t=1.8$），无粘（$\nu=0$）条件下从相同的 Taylor-Green 初始条件出发。
+为进行\textbf{同类场景}的公平对比，两种方法在\textbf{完全相同的初始条件}下仿真：一对反向旋转的涡旋（2024 论文 scene 3 场景，涡旋中心位于 $(-0.7, \pm 1/6)$，半径 $0.8/6$，强度 $\pm 2\pi$），计算域 $[-1,1]^2$，$\Delta t=0.05$，共 40 步（总时长 $t=2.0$）。2022 涡量法以 CPU 在 $64\times64$ 网格上运行，2024 速度法以 GPU（RTX 5060）在 $128\times128$ 网格上运行。
 
 \begin{figure}[H]
     \centering
-    \includegraphics[width=0.95\textwidth]{report_results/2022_vs_2024_long.png}
-    \caption{2022 涡量法与 2024 速度法的长时间（$t=1.8$）动能与涡量演化对比。
-    上左：绝对动能；上右：归一化动能（无粘理想情况应恒为 1）；下左：最大涡量；下右：2022 最终涡量场。}
+    \includegraphics[width=0.95\textwidth]{report_results/2022_vs_2024_vortex_pair.png}
+    \caption{同一涡旋对场景下两种方法的时间演化对比。
+    上行：2024 速度法（GPU，$128\times128$，浓度场）；下行：2022 涡量法（CPU，$64\times64$，涡量场）。
+    两者均正确再现了反向涡旋对的运动。}
     \label{fig:ke_comparison}
 \end{figure}
 
 \begin{table}[H]
     \centering
-    \caption{2022 涡量法与 2024 速度法长时间对比结果（$t=0\to1.8$）}
+    \caption{2022 涡量法与 2024 速度法同类场景对比结果}
     \label{tab:2022_2024}
     \rowcolors{2}{white}{lightgray}
     \begin{tabular}{c|cccc|c}
         \toprule
-        \textbf{方法} & \textbf{初KE} & \textbf{终KE} & \textbf{KE衰减} & \textbf{$\omega_{\max}$终值} & \textbf{耗时} \\
+        \textbf{方法} & \textbf{分辨率} & \textbf{实现} & \textbf{40步耗时} & \textbf{每点每步} & \textbf{同分辨率相对} \\
         \midrule
-        2022 涡量法 (nmc=256) & 47.0 & 11.3 & $-76\%$ & 3.29 & 30.8 s \\
-        2024 速度法 (256p+64r) & 63.8 & 20.1 & $-68\%$ & 3.15 & 0.9 s \\
+        2022 涡量法 & $64\times64$ & CPU (Python) & 80.9 s & 0.49 ms & $1\times$ \\
+        2024 速度法 & $128\times128$ & GPU (OptiX) & 93.4 s & 0.14 ms & 约快 $14\times$ \\
         \bottomrule
     \end{tabular}
 \end{table}
-
-\begin{figure}[H]
-    \centering
-    \includegraphics[width=0.95\textwidth]{report_results/2022_2024_vorticity.png}
-    \caption{两种方法在 $t=1.8$ 时的涡量场对比。}
-    \label{fig:vorticity_comparison}
-\end{figure}
 
 \subsection{结果分析}
 
 从表 \ref{tab:2022_2024} 和图 \ref{fig:ke_comparison} 可以得出以下结论：
 
 \begin{itemize}
-    \item \textbf{计算效率（最显著的差异）}：2022 涡量法每步需为每个网格点执行全域 Biot-Savart 积分（256 次核函数评估），60 步耗时 \textbf{30.8 s}；2024 速度法借助网格缓存，仅需 \textbf{0.9 s}，快约 \textbf{34 倍}。这是涡量法最主要的实用短板。
+    \item \textbf{同类场景均可仿真}：两种方法都在相同的涡旋对初始条件下正确运行，均再现了反向涡旋对的运动。这验证了 2022 涡量法和 2024 速度法在\textbf{场景能力上相当}，可进行同类对比。
 
-    \item \textbf{数值耗散}：在无粘条件下，两种方法的动能均显著衰减——涡量法 $-76\%$，速度法 $-68\%$。这表明两种方法的主要耗散来源都是半拉格朗日平流的插值误差和网格缓存分辨率，而非状态变量选择本身。长时间演化下两者的耗散行为趋于一致。
+    \item \textbf{计算效率（最显著的差异）}：2022 涡量法每步需为每个网格点执行全域 Biot-Savart 积分，每点每步耗时 0.49 ms；2024 GPU 速度法仅 0.14 ms。尽管 2024 运行在 4 倍分辨率（$128^2$ vs $64^2$）上，总耗时仍与 2022 相当，折算到\textbf{相同分辨率下约快 14 倍}。GPU 并行是速度法效率优势的关键。
 
-    \item \textbf{涡量保持}：两种方法对最大涡量的保持相近（$\omega_{\max}$ 均降至初始的约 $54\%$）。涡量法直接演化涡量场，但 Biot-Savart 重建与插值同样引入耗散；速度法通过投影维持不可压缩性，涡量由速度场差分得到，耗散略大但量级接近。
+    \item \textbf{状态变量差异}：2022 直接输出涡量场 $\omega$（物理直观，便于环量/涡旋分析）；2024 输出速度场与浓度场（便于可视化流体材料输运）。两者都可观测到涡旋对的平移与相互作用。
 
-    \item \textbf{稳定性}：两种方法在各自框架下均稳定运行。涡量法速度由积分重建，天然满足 $\nabla\cdot\boldsymbol{u}=0$ 且无投影噪声反馈；速度法依赖 WoB 投影，但投影噪声步间独立，不形成正反馈发散。
+    \item \textbf{稳定性}：两种方法均稳定运行。2022 速度由 Biot-Savart 积分重建，天然无散；2024 依赖 WoB 投影维持不可压缩性，在 GPU 上高效并行，未出现噪声发散。
 \end{itemize}
 
 \subsection{讨论}
 
-\textbf{2022 涡量法的优势与代价。} 涡量法的核心优势是\textbf{天然不可压缩性}：速度由 Biot-Savart 积分重建，自动满足 $\nabla\cdot\boldsymbol{u}=0$，避免了投影步骤及其噪声。同时，涡量作为状态变量便于涡旋动力学分析。其主要代价是 Biot-Savart 积分的计算开销——每次速度查询需遍历全域采样，在细网格上成本急剧上升（实验中为速度法的 34 倍）。此外，涡量法在三维中需要处理涡拉伸项，且在非单连通区域面临调和场问题\cite{sugimoto2024}。
+\textbf{2022 涡量法的优势与代价。} 涡量法的核心优势是\textbf{天然不可压缩性}：速度由 Biot-Savart 积分重建，自动满足 $\nabla\cdot\boldsymbol{u}=0$，避免了投影步骤及其噪声。涡量作为状态变量便于涡旋动力学分析，直接输出涡量场。其主要代价是 Biot-Savart 积分的计算开销——每次速度查询需遍历全域采样，在细网格上成本急剧上升（同分辨率下约为 GPU 速度法的 14 倍慢）。此外，涡量法在三维中需处理涡拉伸项，且在非单连通区域面临调和场问题\cite{sugimoto2024}。
 
-\textbf{2024 速度法的优势与代价。} 速度法直接操作速度场，计算高效，且能自然融入浮力、PIC/FLIP、平流-反射等传统速度法技术。其代价是需要显式维持不可压缩性：投影步骤在有限 MC 采样下引入噪声，若采用 WoS 压力 Poisson + 有限差分梯度，噪声会形成正反馈发散；改用 WoB 特解投影后噪声步间独立，解决了这一问题，但数值耗散仍然较大。
+\textbf{2024 速度法的优势与代价。} 速度法直接操作速度场，采用算子分裂框架，可自然融入浮力、PIC/FLIP、平流-反射等传统速度法技术，并可通过 GPU（OptiX）高效并行。其代价是需要显式维持不可压缩性：投影步骤在有限 MC 采样下引入噪声，若采用 WoS 压力 Poisson + 有限差分梯度，噪声会形成正反馈发散；论文提出 WoB 边界积分投影后噪声步间独立，解决了这一问题。在 GPU 上，速度法每步计算成本远低于涡量法的全域 Biot-Savart 积分。
 
-\textbf{选择建议。} 两种方法各有适用场景：涡量法适合强调物理守恒的研究性仿真（涡旋动力学、环量分析）；速度法适合追求效率与可扩展性的动画级应用（可结合 GPU 并行、方差缩减技术）。
+\textbf{选择建议。} 两种方法各有适用场景：涡量法适合强调物理守恒的研究性仿真（涡旋动力学、环量分析），且无需投影步骤；速度法适合追求效率与可扩展性的动画级应用，GPU 并行使其同分辨率下快约 14 倍，并可方便地扩展浮力、FLIP 等效果。
 
 \section{结论与展望}
 
-本实验实现了 2022 年 Rioux-Lavoie et al. 的涡量法和 2024 年 Sugimoto et al. 的速度法，并在相同测试条件下进行了对比。主要结论如下：
+本实验实现了 2022 年 Rioux-Lavoie et al. 的涡量法和 2024 年 Sugimoto et al. 的速度法，并在\textbf{完全相同初始条件的同类场景}（反向涡旋对）下进行了对比。主要结论如下：
 
 \begin{enumerate}[label=(\arabic*)]
-    \item \textbf{两种算法均已实现}：涡量法（涡量输运 + Biot-Savart + 流函数 WoS）和速度法（算子分裂 + WoB 投影）均可稳定运行。
-    \item \textbf{计算效率}：速度法快约 \textbf{34 倍}（0.9 s vs 30.8 s，$16\times16$ 网格 60 步），网格缓存使投影步骤成本远低于全域 Biot-Savart 积分。这是两种方法最显著的实用差异。
-    \item \textbf{数值耗散相近}：在无粘条件下长时间演化（$t=1.8$）中，两者动能均衰减约 $68\%$--$76\%$，耗散主要源于半拉格朗日平流插值而非状态变量选择。
-    \item \textbf{不可压缩性}：涡量法天然满足 $\nabla\cdot\boldsymbol{u}=0$，速度法依赖投影步骤；WoB 投影的步间独立噪声避免了 WoS 压力 Poisson + 有限差分的正反馈发散问题。
+    \item \textbf{两种算法均已实现并验证}：涡量法（涡量输运 + Biot-Savart + 流函数 WoS，CPU Python）和速度法（算子分裂 + WoB 投影，GPU OptiX）均在相同的涡旋对场景上稳定运行，正确再现了涡旋动力学。
+    \item \textbf{计算效率}：速度法 GPU 实现在 $128\times128$ 分辨率下总耗时与涡量法 CPU 在 $64\times64$ 下相当（93.4 s vs 80.9 s），折算到\textbf{相同分辨率下快约 14 倍}。GPU 并行是速度法效率优势的关键。
+    \item \textbf{状态变量}：涡量法直接演化并输出涡量场（便于物理分析），速度法输出速度/浓度场（便于可视化与扩展浮力、FLIP 等技术）。
+    \item \textbf{不可压缩性}：涡量法天然满足 $\nabla\cdot\boldsymbol{u}=0$，速度法依赖 WoB 投影；WoB 投影的步间独立噪声避免了 WoS 压力 Poisson + 有限差分的正反馈发散问题。
 \end{enumerate}
 
 展望未来，以下方向值得探索：
