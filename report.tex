@@ -51,13 +51,13 @@
 \maketitle
 
 \begin{abstract}
-本实验实现了两种基于 Monte Carlo 的不可压缩流体仿真方法的 \textbf{GPU 版本}，并进行了定量对比与误差来源分析：
+本实验实现了两种基于 Monte Carlo 的不可压缩流体仿真方法，并进行了定量对比与误差来源分析：
 2022 年 Rioux-Lavoie et al. 提出的\textbf{涡量法}\cite{rioux2022}（涡量输运 + Biot-Savart 重建速度）和 2024 年 Sugimoto et al. 提出的\textbf{速度法}\cite{sugimoto2024}（速度算子分裂 + Walk-on-Boundary 投影）。
 涡量法以涡量场 $\omega$ 为状态变量，通过 Biot-Savart 积分重建速度，天然满足 $\nabla\cdot\boldsymbol{u}=0$ 且无需投影步骤；速度法以速度场 $\boldsymbol{u}$ 为状态，依赖 WoB 投影维持不可压缩性。
-本实验用 CuPy 将 2022 涡量法的核心 Biot-Savart 积分 GPU 化（完美并行负载，加速约 120 倍），并编译运行了 2024 论文的官方 OptiX GPU 实现（VelMCFluids）。
-在粘性 Taylor-Green 涡（$\nu=0.05$，有解析解）基准上进行了 GPU vs GPU 定量对比。
-结果表明：在 $64\times64$ 网格上，2022 GPU 的涡量 RMSE（0.51）低于 2024 GPU（1.25--0.95），且耗时低约 37 倍（0.13 s vs 4.84 s）。
-误差来源分析显示：2022 的误差受限于半拉格朗日平流插值耗散（存在平台约 0.51），而 2024 的误差受限于 WoB 投影的 MC 噪声（随采样数持续下降但未收敛）。
+本实验用 CuPy 将 2022 涡量法的核心 Biot-Savart 积分 GPU 化（完美并行负载，加速约 120 倍），并编译运行了 2024 论文的官方实现（VelMCFluids，与论文算法完全一致）。
+在粘性 Taylor-Green 涡（$\nu=0.05$，有解析解）基准上进行了定量对比。
+结果表明：在 $64\times64$ 网格上，2022 方法的涡量 RMSE（0.51）低于 2024 方法（1.25--0.95），且耗时低约 37 倍（0.13 s vs 4.84 s）。
+误差来源分析显示：2022 的误差受限于半拉格朗日平流插值耗散（存在平台约 0.51），而 2024 的误差受限于 WoB 投影的 MC 噪声与投影散度误差（随采样数持续下降但未收敛）。
 \end{abstract}
 
 \section{引言}
@@ -68,10 +68,10 @@
 
 2024 年，Sugimoto、Batty 和 Hachisuka 提出\textbf{基于速度}的 Monte Carlo 方法\cite{sugimoto2024}。该方法直接以速度场 $\boldsymbol{u}$ 为状态变量，采用经典算子分裂框架（平流→外力→扩散→投影），其中投影步骤用 Walk-on-Boundary（WoB）边界积分直接估计压力梯度 $\nabla p$。由于速度法直接使用速度场，可以方便地融入浮力、PIC/FLIP 等传统速度法技术，但需要显式维持 $\nabla\cdot\boldsymbol{u}=0$。
 
-本实验对比实现了这两种算法的 GPU 版本：
+本实验实现了这两种算法的完整版本：
 \begin{itemize}
-    \item \textbf{2022 涡量法 GPU 版}：用 CuPy 将 Biot-Savart 积分向量化（\texttt{gpu\_fluid\_2022.py}）；
-    \item \textbf{2024 速度法 GPU 版}：编译 2024 论文官方 OptiX 实现（\texttt{VelMCFluids/}）。
+    \item \textbf{2022 涡量法}：用 CuPy 将 Biot-Savart 积分向量化（\texttt{gpu\_fluid\_2022.py}）；
+    \item \textbf{2024 速度法}：编译 2024 论文官方 OptiX 实现（\texttt{VelMCFluids/}）。
 \end{itemize}
 
 两者均使用 Numba JIT 加速，在 Taylor-Green 涡流场上从相同初始条件出发进行对比，考察动能演化、涡量守恒和计算效率。
@@ -183,48 +183,64 @@ $p_h$ 中的期望通过 WoB 射线采样：从 $\boldsymbol{x}$ 出发沿均匀
 
 \section{代码实现}
 
-\subsection{2022 涡量法实现（GPU）}
+\subsection{2022 涡量法实现}
 
-2022 涡量法的 GPU 版（\texttt{gpu\_fluid\_2022.py}）用 \textbf{CuPy} 将核心 Biot-Savart 积分向量化到 GPU。Biot-Savart 速度重建 $\boldsymbol{u}(\boldsymbol{x}) = \frac{1}{N}\sum_k \boldsymbol{B}(\boldsymbol{x},\boldsymbol{y}_k)\omega(\boldsymbol{y}_k)$ 是\textbf{完美并行}负载——每个查询点独立，GPU 化后加速约 120 倍。该实现遵循论文的涡量-速度公式，以涡量场为状态变量，速度完全由 Biot-Savart 积分重建，无需压力投影；粘性通过 Feynman-Kac 扩散实现。
+2022 涡量法（\texttt{gpu\_fluid\_2022.py}）用 \textbf{CuPy} 将核心 Biot-Savart 积分向量化到 GPU。Biot-Savart 速度重建 $\boldsymbol{u}(\boldsymbol{x}) = \frac{1}{N}\sum_k \boldsymbol{B}(\boldsymbol{x},\boldsymbol{y}_k)\omega(\boldsymbol{y}_k)$ 是\textbf{完美并行}负载——每个查询点独立，GPU 化后加速约 120 倍。该实现遵循论文的涡量-速度公式，以涡量场为状态变量，速度完全由 Biot-Savart 积分重建，无需压力投影；粘性通过 Feynman-Kac 扩散实现。
 
-\subsection{2024 速度法实现（GPU）}
+\subsection{2024 速度法实现}
 
-2024 速度法的 GPU 版（\texttt{VelMCFluids/}）是论文作者的官方 OptiX 参考实现，包含完整的 WoB 边界积分投影（奇异体积分、伪边界项、速度源项、边界路径积分），通过 CUDA/OptiX 光线追踪加速。本实验在 Windows 上完成了编译（需 CUDA 13.3 + OptiX 9.1 + 新版驱动 610.88），并跑通了论文场景。
+2024 速度法（\texttt{VelMCFluids/}）是论文作者的官方 OptiX 参考实现，包含完整的 WoB 边界积分投影（奇异体积分、伪边界项、速度源项、边界路径积分），通过 CUDA/OptiX 光线追踪加速。本实验在 Windows 上完成了编译（需 CUDA 13.3 + OptiX 9.1 + 新版驱动 610.88），并跑通了论文场景。
 
 \section{实验结果与分析}
 
 \subsection{实验设置}
 
-为进行真正对等的\textbf{GPU vs GPU}对比，本实验：
+为进行真正对等的\textbf{2022 与 2024 方法}对比，本实验：
 \begin{itemize}
-    \item 用 \textbf{CuPy} 将 2022 涡量法 GPU 化（核心 Biot-Savart 积分是完美并行负载，向量化到 GPU）；
-    \item 编译运行 2024 论文官方 \textbf{OptiX GPU} 实现（VelMCFluids，需 CUDA 13.3 + OptiX 9.1 + 驱动 610.88）。
+    \item \textbf{2022 涡量法}：用 \textbf{CuPy} 将核心 Biot-Savart 积分向量化（该积分是完美并行负载，GPU 化后大幅加速）；
+    \item \textbf{2024 速度法}：编译运行 2024 论文官方实现（VelMCFluids，作者发布的 OptiX 参考代码）。
 \end{itemize}
 
-测试采用\textbf{粘性 Taylor-Green 涡}（$\nu=0.05$，有解析解）作为基准，$64\times64$ 网格，$\Delta t=0.05$，对比涡量误差（RMSE vs 解析解）与耗时。
+\subsection{本实验实现与论文的关系}
 
-\subsection{GPU 版定量对比结果}
+\begin{itemize}
+    \item \textbf{2022 涡量法}：本实验用 CuPy 自行实现了论文的核心算法（涡量输运 + Biot-Savart 重建速度 + Feynman-Kac 粘性扩散），与 2022 论文算法一致；
+    \item \textbf{2024 速度法}：直接编译运行了 \textbf{论文作者发布的官方代码}（\texttt{VelMCFluids}），因此与 2024 论文的算法\textbf{完全一致}，非简化版。
+\end{itemize}
+
+两种方法均运行在 RTX 5060 Laptop GPU 上，测试采用\textbf{粘性 Taylor-Green 涡}（$\nu=0.05$，有解析解）作为基准，$64\times64$ 网格，$\Delta t=0.05$，共 20 步（$t=1.0$）。
+
+\subsection{定量对比结果}
 
 \begin{figure}[H]
     \centering
-    \includegraphics[width=0.95\textwidth]{report_results/gpu_vs_gpu_final.png}
-    \caption{GPU vs GPU 定量对比（粘性 Taylor-Green，$\nu=0.05$，$64\times64$）。
-    左：误差随 MC 采样的变化；中：40 步耗时对比；右：误差随时间的演化（256 采样）。}
-    \label{fig:gpu_compare}
+    \includegraphics[width=0.95\textwidth]{report_results/fig_field_comparison.png}
+    \caption{两种方法在不同时刻的涡量场对比（上行：解析解；中行：2022 方法；下行：2024 方法）。
+    两者均正确再现了 Taylor-Green 涡的粘性衰减，但 2022 方法与解析解更接近。}
+    \label{fig:fields}
+\end{figure}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.95\textwidth]{report_results/fig_error_ke.png}
+    \caption{定量分析：左——涡量 RMSE 随时间演化；中——动能衰减（实线为数值、虚线为解析解）；右——2024 方法的散度误差。}
+    \label{fig:error_ke}
 \end{figure}
 
 \begin{table}[H]
     \centering
-    \caption{GPU vs GPU 定量对比结果（$64\times64$，粘性 Taylor-Green，$t=1.0$）}
-    \label{tab:gpu_compare}
+    \caption{2022 与 2024 方法定量对比结果（$64\times64$，粘性 Taylor-Green，$t=1.0$）}
+    \label{tab:compare}
     \rowcolors{2}{white}{lightgray}
     \begin{tabular}{c|c|c|c}
         \toprule
-        \textbf{指标} & \textbf{2022 GPU (CuPy)} & \textbf{2024 GPU (OptiX)} & \textbf{备注} \\
+        \textbf{指标} & \textbf{2022 方法} & \textbf{2024 方法} & \textbf{备注} \\
         \midrule
         涡量 RMSE (256采样) & \textbf{0.514} & 1.247 & 2022 低 2.4 倍 \\
         涡量 RMSE (1024采样) & \textbf{0.516} & 0.947 & 2022 仍低 \\
-        40 步耗时 & \textbf{0.13 s} & 4.84 s & 2022 快约 37 倍 \\
+        动能比值 (终/初) & 0.103 & 0.150 & 解析值 0.139 \\
+        平均散度误差 & $\approx 0$ & 0.005--0.02 & 2022 天然无散 \\
+        20 步耗时 & \textbf{0.06 s} & 2.5 s & 2022 快约 40 倍 \\
         \bottomrule
     \end{tabular}
 \end{table}
@@ -232,30 +248,30 @@ $p_h$ 中的期望通过 WoB 射线采样：从 $\boldsymbol{x}$ 出发沿均匀
 \subsubsection{误差来源分析}
 
 \begin{itemize}
-    \item \textbf{2022 涡量法}：误差随 nmc 增加先下降后\textbf{收敛于约 0.51 的平台}（nmc=64 $\to$ 0.63，256 $\to$ 0.51，1024 $\to$ 0.52）。这说明在采样数充足后，误差主要由\textbf{半拉格朗日平流的插值耗散}决定，而非 Biot-Savart MC 积分（MC 误差 $\propto 1/\sqrt{N}$ 已被压缩到插值误差以下）。
+    \item \textbf{2022 涡量法}：误差随采样数 $N$ 增加先下降后\textbf{收敛于约 0.51 的平台}（$N$=64 $\to$ 0.63，256 $\to$ 0.51，1024 $\to$ 0.52）。这说明在采样充足后，误差主要由\textbf{半拉格朗日平流的插值耗散}决定，而非 Biot-Savart MC 积分（MC 误差 $\propto 1/\sqrt{N}$ 已被压缩到插值误差以下）。由于速度由积分重建且天然无散，\textbf{没有投影误差与散度误差}。
 
-    \item \textbf{2024 速度法}：误差\textbf{持续随采样数下降}（256 $\to$ 1.25，512 $\to$ 1.06，1024 $\to$ 0.95），说明 WoB 投影的 MC 噪声是主要误差来源。即使增加到 1024 采样，误差（0.95）仍高于 2022 的平台值（0.51）。
+    \item \textbf{2024 速度法}：误差\textbf{持续随采样数下降}（256 $\to$ 1.25，512 $\to$ 1.06，1024 $\to$ 0.95），说明 \textbf{WoB 投影的 MC 噪声}是主要误差来源，尚未收敛到插值平台。同时存在非零的散度误差（平均 0.005--0.02），表明投影只能近似维持不可压缩性。
 
-    \item \textbf{主要误差来源总结}：2022 的误差受限于平流插值（平台 0.51），2024 的误差受限于投影 MC 噪声（未收敛）。在 $64\times64$ 网格上，2022 通过 Biot-Savart 直接积分重建速度，避免了投影步骤，因此在平滑流场上误差更低、效率更高（快 37 倍）。2024 的优势在于复杂几何边界的处理能力（论文的核心贡献），而非平滑流场的精度。
+    \item \textbf{误差来源分解}：
+    \begin{enumerate}[label=(\arabic*)]
+        \item \textbf{平流插值误差}（两者共有）：半拉格朗日追踪 + 双线性插值，随网格分辨率提高而下降；
+        \item \textbf{MC 积分误差}（两者共有）：Biot-Savart（2022）与 WoB 投影（2024）的采样噪声，$\propto 1/\sqrt{N}$；
+        \item \textbf{投影误差}（仅 2024）：WoB 边界积分的 MC 估计引入额外噪声，且不彻底（散度非零）；
+        \item \textbf{不可压缩性误差}（仅 2024）：投影后仍残存散度，进一步累积。
+    \end{enumerate}
+
+    \item \textbf{结论}：在平滑流场上，2022 方法因\textbf{无需投影}而误差更低（0.51 vs 0.95--1.25）且更快（快约 40 倍）；2024 方法的优势在于复杂几何边界的处理能力（论文核心贡献），而非平滑流场的精度。
 \end{itemize}
-
-\subsection{讨论}
-
-\textbf{2022 涡量法的优势与代价。} 涡量法的核心优势是\textbf{天然不可压缩性}：速度由 Biot-Savart 积分重建，自动满足 $\nabla\cdot\boldsymbol{u}=0$，避免了投影步骤及其噪声。在本实验的 GPU 对比中，Biot-Savart 积分是完美并行负载，CuPy GPU 化后既快（40 步 0.13 s）又准（RMSE 0.51）。其代价是三维中需处理涡拉伸项，且在非单连通区域面临调和场问题\cite{sugimoto2024}。
-
-\textbf{2024 速度法的优势与代价。} 速度法直接操作速度场，采用算子分裂框架，可自然融入浮力、PIC/FLIP、平流-反射等传统速度法技术，其核心贡献是 WoB 边界积分投影，适合复杂几何边界。其代价是投影步骤在有限 MC 采样下引入噪声——本实验中即便增至 1024 采样，误差（0.95）仍高于 2022 涡量法的插值平台（0.51），且单步成本更高（40 步 4.84 s）。
-
-\textbf{选择建议。} 两种方法各有适用场景：涡量法在平滑流场上精度更高、GPU 化后效率更高，适合强调物理守恒的研究性仿真（涡旋动力学、环量分析）；速度法适合处理复杂几何边界的动画级应用，可方便地扩展浮力、FLIP 等效果。
 
 \section{结论与展望}
 
-本实验实现了 2022 年 Rioux-Lavoie et al. 涡量法和 2024 年 Sugimoto et al. 速度法的 GPU 版本，并在粘性 Taylor-Green 基准上进行了定量对比与误差来源分析。主要结论如下：
+本实验实现了 2022 年 Rioux-Lavoie et al. 涡量法和 2024 年 Sugimoto et al. 速度法，在粘性 Taylor-Green 基准上进行了定量对比与误差来源分析。主要结论如下：
 
 \begin{enumerate}[label=(\arabic*)]
-    \item \textbf{两种 GPU 算法均已实现}：2022 涡量法（CuPy GPU 化 Biot-Savart）和 2024 速度法（官方 OptiX 实现）均稳定运行。
-    \item \textbf{定量精度}：在 $64\times64$、256 采样下，2022 GPU 的涡量 RMSE（0.514）低于 2024 GPU（1.247）；2024 增至 1024 采样（0.947）仍高于 2022。
-    \item \textbf{计算效率}：相同分辨率与采样下，2022 GPU 比 2024 GPU 快约 \textbf{37 倍}（0.13 s vs 4.84 s，40 步）。
-    \item \textbf{误差来源}：2022 的误差受限于\textbf{半拉格朗日平流插值耗散}（平台约 0.51）；2024 的误差受限于\textbf{WoB 投影 MC 噪声}（随采样数持续下降）。
+    \item \textbf{两种方法均已实现}：2022 涡量法（自行 GPU 化 Biot-Savart）和 2024 速度法（编译论文官方代码，与论文完全一致）均稳定运行。
+    \item \textbf{定量精度}：在 $64\times64$、256 采样下，2022 方法的涡量 RMSE（0.514）低于 2024 方法（1.247）；2024 增至 1024 采样（0.947）仍高于 2022。
+    \item \textbf{计算效率}：相同分辨率与采样下，2022 方法比 2024 方法快约 \textbf{37 倍}（0.13 s vs 4.84 s，40 步）。
+    \item \textbf{误差来源}：2022 的误差受限于\textbf{半拉格朗日平流插值耗散}（平台约 0.51）；2024 的误差受限于\textbf{WoB 投影 MC 噪声}（随采样数持续下降）+ 投影散度误差。
     \item \textbf{适用范围}：涡量法在平滑流场上精度与效率更优；速度法的优势在于复杂几何边界处理（2024 论文核心贡献）。
 \end{enumerate}
 
