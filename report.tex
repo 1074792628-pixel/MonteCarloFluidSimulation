@@ -292,6 +292,20 @@ Taylor-Green 涡是一个经典的 CFD 测试流场，其\textbf{解析解}已�
     \item \textbf{结论}：在平滑流场上，2022 方法因\textbf{无需投影}而误差更低（0.51 vs 0.95--1.25）且更快（快约 40 倍）；2024 方法的优势在于复杂几何边界的处理能力（论文核心贡献），而非平滑流场的精度。
 \end{itemize}
 
+\subsection{复杂边界的对比：2024 方法的优势}
+
+两种方法在\textbf{复杂边界}（尤其非单连通域，即含孔洞的区域）上的表现存在根本差异。2024 论文明确指出，涡量法在这类场景下会\textbf{失效}：
+
+\begin{itemize}
+    \item \textbf{涡量法的局限}：Biot-Savart 重建 $\boldsymbol{u} = \int \boldsymbol{B}\,\omega\,d\boldsymbol{y}$ 仅由涡量 $\omega$ 决定速度的\textbf{旋量部分}。当计算域\textbf{非单连通}（存在障碍物/孔洞）时，速度场还包含一个\textbf{调和分量}（无旋且无散，$\nabla\times\boldsymbol{h}=\nabla\cdot\boldsymbol{h}=0$）。该调和分量\textbf{不能由涡量唯一确定}，导致涡量法产生错误的流场。Yin et al.\cite{yin2023} 指出，涡量法在非单连通域上无法正确模拟调和速度场。
+
+    \item \textbf{2024 速度法的优势}：速度法直接以速度场为状态变量，通过 WoB 边界积分投影显式求解包含调和分量的完整不可压缩流场，因此\textbf{自然处理非单连通域}。
+
+    \item \textbf{论文演示}：2024 论文 Fig.~1 展示了这一差异——在一对反向涡旋从两个障碍物之间流过时，速度法（本文方法）正确让烟雾穿过障碍物间隙，而涡量法（2022 方法）错误地让烟雾绕到障碍物外侧。其核心演示场景为 \texttt{hexagons.obj}（外六边形内含多个内六边形孔洞，构成上同调非单连通域），对应论文的 cohomology 场景。
+\end{itemize}
+
+本实验尝试运行该 cohomology 场景，但即使降低分辨率（$64\times64$），复杂六边形边界的 VPL 路径积分仍非常耗时，未能在有限时间内完成完整演示。因此，关于复杂边界的优势主要依据论文的验证与理论分析。这一差异体现了两种方法的设计哲学：涡量法以物理守恒换取简单性，在单连通平滑域上高效；速度法以投影代价换取对复杂几何的鲁棒性。
+
 \section{结论与展望}
 
 本实验实现了 2022 年 Rioux-Lavoie et al. 涡量法和 2024 年 Sugimoto et al. 速度法，在粘性 Taylor-Green 基准上进行了定量对比与误差来源分析。主要结论如下：
@@ -332,6 +346,11 @@ R. Sawhney,
 R. Sugimoto,
 \newblock VelMCFluids: Velocity-Based Monte Carlo Fluids,
 \newblock \url{https://github.com/rsugimoto/VelMCFluids}, 2024.
+
+\bibitem{yin2023}
+H. Yin, A. Chern, B. Zhu, and others,
+\newblock The harmonic mode of incompressible fluids,
+\newblock \emph{ACM Transactions on Graphics}, 2023.
 \end{thebibliography}
 
 \end{document}
