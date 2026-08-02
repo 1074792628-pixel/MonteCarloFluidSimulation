@@ -208,7 +208,25 @@ $p_h$ 中的期望通过 WoB 射线采样：从 $\boldsymbol{x}$ 出发沿均匀
     \item \textbf{2024 速度法}：直接编译运行了 \textbf{论文作者发布的官方代码}（\texttt{VelMCFluids}），因此与 2024 论文的算法\textbf{完全一致}，非简化版。
 \end{itemize}
 
-两种方法均运行在 RTX 5060 Laptop GPU 上，测试采用\textbf{粘性 Taylor-Green 涡}（$\nu=0.05$，有解析解）作为基准，$64\times64$ 网格，$\Delta t=0.05$，共 20 步（$t=1.0$）。
+两种方法均运行在 RTX 5060 Laptop GPU 上，测试采用\textbf{粘性 Taylor-Green 涡}作为基准（$\nu=0.05$，有解析解），$64\times64$ 网格，$\Delta t=0.05$，共 20 步（$t=1.0$）。
+
+Taylor-Green 涡是一个经典的 CFD 测试流场，其\textbf{解析解}已知，可用于精确量化仿真误差。在 2D 中，速度场与涡量场为：
+\begin{equation}
+\boldsymbol{u}(x,y,t) = \bigl(-\cos(kx)\sin(ky),\;\sin(kx)\cos(ky)\bigr)^{\top} e^{-2\nu k^2 t},
+\label{eq:tg_velocity}
+\end{equation}
+\begin{equation}
+\omega(x,y,t) = \nabla\times\boldsymbol{u} = 2k\,\cos(kx)\cos(ky)\, e^{-2\nu k^2 t},
+\label{eq:tg_vorticity}
+\end{equation}
+其中 $k$ 为波数（$k=2\pi/L$，$L$ 为计算域边长）。该流场满足：
+\begin{itemize}
+    \item \textbf{天然不可压缩}：$\nabla\cdot\boldsymbol{u}=0$；
+    \item \textbf{解析解已知}：任意时刻 $t$ 的精确解由式 (\ref{eq:tg_velocity})--(\ref{eq:tg_vorticity}) 给出，可精确计算数值解的 RMSE；
+    \item \textbf{指数衰减}：无粘时（$\nu=0$）涡量保持不变；粘性时按 $e^{-2\nu k^2 t}$ 衰减。
+\end{itemize}
+
+本实验中，2022 方法使用波数 $k=\pi$（域 $[-1,1]$，$L=2$），2024 方法使用波数 $k=2\pi/L$（域 $[-1.2,1.2]$，$L=2.4$），各自与对应的解析解对比。
 
 \subsection{定量对比结果}
 
