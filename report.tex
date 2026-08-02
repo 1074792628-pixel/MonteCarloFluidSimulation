@@ -93,6 +93,12 @@
 \omega(\boldsymbol{x}, t) = \omega(\boldsymbol{x} - \Delta t\,\boldsymbol{u}(\boldsymbol{x},t),\, t-\Delta t).
 \end{equation}
 
+对于粘性情形，2022 年方法通过 Feynman-Kac 公式处理扩散 $\partial\omega/\partial t = \nu\nabla^2\omega$：
+\begin{equation}
+\omega(\boldsymbol{x}, t+\Delta t) = \mathbb{E}\left[\omega_{\text{adv}}(\boldsymbol{x} + \sqrt{2\nu\Delta t}\,\boldsymbol{Z},\, t)\right],\quad \boldsymbol{Z}\sim\mathcal{N}(0,\boldsymbol{I}),
+\end{equation}
+即涡量平流后，每个点按 $\sqrt{2\nu\Delta t}$ 的高斯扰动采样并插值，实现粘性扩散。本实验的 GPU 实现即采用此 Feynman-Kac 扩散。
+
 \subsubsection{Biot-Savart 重建速度}
 
 从涡量场重建速度场的关键是 Biot-Savart 定律。在 2D 中，速度与涡量的关系为
@@ -143,19 +149,24 @@ u(x) = \mathbb{E}[g(B_\tau)] - \mathbb{E}\left[\int_0^\tau f(B_s)\,ds\right],
 
 \subsubsection{WoB 投影}
 
-投影步骤需要求解压力 Poisson 方程 $\nabla^2 p = \nabla\cdot\boldsymbol{u}$。2024 年论文提出用 Walk-on-Boundary（WoB）边界积分直接估计 $\nabla p$，而非求解标量 $p$。
-
-由于完整 WoB 多弹跳路径积分需要 GPU 加速，本实验采用\textbf{特解 + 边界修正}的简化实现。将解分解为自由空间特解 $p_p$ 与调和修正 $p_h$：
+投影步骤需要求解压力 Poisson 方程 $\nabla^2 p = \nabla\cdot\boldsymbol{u}$，即计算压力梯度 $\nabla p$ 以修正速度：
 \begin{equation}
-p(\boldsymbol{x}) = p_p(\boldsymbol{x}) + p_h(\boldsymbol{x}),
-\end{equation}
-其中
-\begin{equation}
-p_p(\boldsymbol{x}) = \int_\Omega \frac{1}{2\pi}\ln|\boldsymbol{x}-\boldsymbol{y}|\,f(\boldsymbol{y})\,d\boldsymbol{y}, \qquad
-p_h(\boldsymbol{x}) = \mathbb{E}\left[-p_p(\boldsymbol{y}_{\partial\Omega})\right].
+\boldsymbol{u}^{n+1} = \boldsymbol{u} - \nabla p, \qquad \nabla^2 p = \nabla\cdot\boldsymbol{u}.
 \end{equation}
 
-$p_h$ 中的期望通过 WoB 射线采样：从 $\boldsymbol{x}$ 出发沿均匀随机方向发射射线至矩形边界，$\boldsymbol{y}_{\partial\Omega}$ 为首次撞点。对凸域而言该采样等价于调和测度，因而是正确的。得到 $p$ 后，用中心差分计算 $\nabla p$ 修正速度。
+2024 年论文提出用 Walk-on-Boundary（WoB）边界积分\textbf{直接估计} $\nabla p$，而非求解标量 $p$ 再差分。其完整估计包含四个子项：
+
+\begin{align}
+\nabla p(\boldsymbol{x}) = &\underbrace{\int_{B(\boldsymbol{x})} \boldsymbol{K}(\boldsymbol{x},\boldsymbol{y})\cdot\Delta\boldsymbol{u}\,d\boldsymbol{y}}_{\text{1. 奇异体积分 (singular volume term)}} \nonumber \\
+&+ \underbrace{\int_{\partial\Omega_{\text{pseudo}}} \nabla G(\boldsymbol{x}-\boldsymbol{y})\left[\boldsymbol{n}\cdot(\boldsymbol{u}-\boldsymbol{u}_\infty)\right] dS_{\boldsymbol{y}}}_{\text{2. 伪边界项 (pseudo-boundary term)}} \nonumber \\
+&+ \underbrace{\sum_k \boldsymbol{f}_k\,\nabla G(\boldsymbol{x}-\boldsymbol{y}_k)}_{\text{3. 速度源项 (velocity source term)}} \nonumber \\
+&+ \underbrace{\iint_{\partial\Omega} \nabla G(\boldsymbol{x}-\boldsymbol{y})\, \boldsymbol{n}(\boldsymbol{y})\cdot(\boldsymbol{u}(\boldsymbol{y})-\boldsymbol{u}_{\text{solid}})\,\Pi(\boldsymbol{y},\boldsymbol{y}')\,dS_{\boldsymbol{y}}}_{\text{4. 边界路径积分 (boundary path)}}.
+\label{eq:wob_terms}
+\end{align}
+
+其中 Green 函数 $G(\boldsymbol{r}) = (1/2\pi)\ln|\boldsymbol{r}|$ 满足 $\nabla^2 G = \delta$，核函数 $\boldsymbol{K}(\boldsymbol{r},\Delta\boldsymbol{u}) = [2(\hat{\boldsymbol{r}}\cdot\Delta\boldsymbol{u})\hat{\boldsymbol{r}} - \Delta\boldsymbol{u}]/(2\pi|\boldsymbol{r}|^2)$，$\Delta\boldsymbol{u} = \boldsymbol{u}(\boldsymbol{y})-\boldsymbol{u}(\boldsymbol{x})$。各子项通过 WoB 随机行走估计：从 $\boldsymbol{x}$ 出发沿随机方向发射射线至边界，边界点由 CDF 重要性采样，路径多弹跳累积贡献。
+
+本实验直接编译运行了 2024 论文作者的\textbf{官方完整实现}（VelMCFluids，OptiX GPU 加速），包含上述全部四个子项，与论文算法\textbf{完全一致}。
 
 \subsection{两种算法的本质区别}
 
