@@ -314,7 +314,21 @@ Taylor-Green 涡是一个经典的 CFD 测试流场，其\textbf{解析解}已�
     \label{fig:complex_boundary}
 \end{figure}
 
-2022 涡量法缺乏相应的 GPU 实现（需流函数 WoS 处理该几何），其在此类非单连通域上的失效是理论上的根本局限（调和分量缺失），故此处未进行 2022 的数值演示。这一差异体现了两种方法的设计哲学：涡量法以物理守恒换取简单性，在单连通平滑域上高效；速度法以投影代价换取对复杂几何的鲁棒性。
+\textbf{数值演示：均匀来流绕圆柱（Kármán 涡街）。} 为直观对比复杂边界的处理能力，本实验选取\textbf{均匀来流绕圆柱}这一经典场景。该场景的关键在于：\textbf{均匀来流本身是调和场}（涡量 $\omega=0$），而绕柱流动的势流部分（自由来流 + 圆柱偶极子修正）同样无旋。因此：
+
+\begin{itemize}
+    \item \textbf{2022 涡量法}：由于均匀来流 $\omega=0$，Biot-Savart 积分 $\boldsymbol{u} = \int \boldsymbol{B}\,\omega\,d\boldsymbol{y}$ 给出的速度为\textbf{零}——涡量法\textbf{根本无法表示均匀来流}，更无法模拟绕柱流动。如图 \ref{fig:complex_boundary_compare} 左所示，速度场恒为零。
+    \item \textbf{2024 速度法}：直接以速度场为状态，自然包含均匀来流这一调和分量，并通过 WoB 边界积分在圆柱表面维持不可穿透条件，正确产生 Kármán 涡街（图 \ref{fig:complex_boundary_compare} 右）。
+\end{itemize}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.95\textwidth]{report_results/fig_complex_boundary_comparison.png}
+    \caption{复杂边界对比：左——2022 涡量法对均匀来流绕圆柱的速度场（Biot-Savart 从 $\omega=0$ 重建出零速度，无法表示调和场）；右——2024 速度法正确模拟绕圆柱流动，产生 Kármán 涡街。}
+    \label{fig:complex_boundary_compare}
+\end{figure}
+
+这一差异体现了两种方法的设计哲学：涡量法以物理守恒换取简单性，在单连通平滑域上高效，但无法处理含调和分量的流场（均匀来流、绕柱流动、带孔洞的非单连通域）；速度法以投影代价换取对复杂几何与调和场的鲁棒性。
 
 \section{结论与展望}
 
