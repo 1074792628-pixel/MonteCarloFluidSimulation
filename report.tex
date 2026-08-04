@@ -274,6 +274,47 @@ Taylor-Green 涡是一个经典的 CFD 测试流场，其\textbf{解析解}已�
     \end{tabular}
 \end{table}
 
+\subsubsection{扩展定量指标}
+
+为进一步全面评估，补充以下定量指标（$t=1.0$，256 采样，$64\times64$）：
+
+\begin{table}[H]
+    \centering
+    \caption{扩展定量指标对比}
+    \label{tab:extended_metrics}
+    \rowcolors{2}{white}{lightgray}
+    \begin{tabular}{c|c|c|c}
+        \toprule
+        \textbf{指标} & \textbf{2022 方法} & \textbf{2024 (256采样)} & \textbf{2024 (1024采样)} \\
+        \midrule
+        相对 RMSE (RMSE/max$\omega_0$) & \textbf{0.100} & 0.238 & 0.181 \\
+        动能相对误差 & \textbf{0.278} & 0.959 & 0.955 \\
+        绝对环量相对误差 & \textbf{0.158} & 0.188 & 0.361 \\
+        最大涡量相对误差 & \textbf{0.019} & 0.949 & 0.317 \\
+        平均散度误差 & $\approx 0$ & 0.743 & 0.383 \\
+        \bottomrule
+    \end{tabular}
+\end{table}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.95\textwidth]{report_results/fig_comprehensive_metrics.png}
+    \caption{扩展定量分析：左——主要误差指标对比；中——2024 误差随采样数的收敛（水平虚线为 2022 的平台值）；右——2022 误差随网格分辨率的收敛。}
+    \label{fig:comprehensive}
+\end{figure}
+
+扩展指标揭示的关键差异：
+
+\begin{itemize}
+    \item \textbf{最大涡量保持}：2022 的最大涡量相对误差仅 \textbf{0.019}，而 2024 高达 0.949（256 采样）和 0.317（1024 采样）。这是因为 2024 的 WoB 投影 MC 噪声直接污染速度场，经旋度算子放大后严重破坏了涡量峰值；2022 直接演化涡量，天然保持峰值。
+
+    \item \textbf{动能误差}：2022 的动能相对误差（0.278）远低于 2024（0.959）。2024 的投影噪声为速度场注入额外能量，导致动能偏高。
+
+    \item \textbf{绝对环量}：两者相近（0.158 vs 0.188），说明在涡量总量守恒上两者相当。
+
+    \item \textbf{收敛性}：2022 的误差随分辨率缓慢下降（res 32$\to$64$\to$128：0.61$\to$0.55$\to$0.49），空间精度约一阶，且在高分辨率受 MC 误差下限限制；2024 的误差随采样数下降（256$\to$1024：1.25$\to$0.95），但始终高于 2022 的平台值。
+\end{itemize}
+
 \subsubsection{误差来源分析}
 
 \begin{itemize}
