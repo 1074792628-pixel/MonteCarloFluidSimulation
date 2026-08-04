@@ -355,17 +355,20 @@ Taylor-Green 涡是一个经典的 CFD 测试流场，其\textbf{解析解}已�
     \label{fig:complex_boundary}
 \end{figure}
 
-\textbf{数值演示：均匀来流绕圆柱（Kármán 涡街）。} 为直观对比复杂边界的处理能力，本实验选取\textbf{均匀来流绕圆柱}这一经典场景。该场景的关键在于：\textbf{均匀来流本身是调和场}（涡量 $\omega=0$），而绕柱流动的势流部分（自由来流 + 圆柱偶极子修正）同样无旋。因此：
+\textbf{数值演示：障碍物边界的处理。} 为直观对比复杂边界的处理能力，本实验分别测试了两种方法在\textbf{圆形障碍物}存在时的行为：
 
 \begin{itemize}
-    \item \textbf{2022 涡量法}：由于均匀来流 $\omega=0$，Biot-Savart 积分 $\boldsymbol{u} = \int \boldsymbol{B}\,\omega\,d\boldsymbol{y}$ 给出的速度为\textbf{零}——涡量法\textbf{根本无法表示均匀来流}，更无法模拟绕柱流动。如图 \ref{fig:complex_boundary_compare} 左所示，速度场恒为零。
-    \item \textbf{2024 速度法}：直接以速度场为状态，自然包含均匀来流这一调和分量，并通过 WoB 边界积分在圆柱表面维持不可穿透条件，正确产生 Kármán 涡街（图 \ref{fig:complex_boundary_compare} 右）。
+    \item \textbf{2022 涡量法}：以一个涡旋靠近圆形障碍物为例，涡量场在障碍物内部被置零，但 Biot-Savart 积分$\boldsymbol{u} = \int \boldsymbol{B}\,\omega\,d\boldsymbol{y}$\textbf{仅由涡量重建速度，不包含障碍物边界修正}（调和分量缺失）。因此产生的速度场\textbf{直接穿过障碍物}，圆柱内部的平均速度高达 0.099，\textbf{违反不可穿透边界条件}（图 \ref{fig:complex_boundary_compare} 左）。
+
+    \item \textbf{2024 速度法}：直接以速度场为状态，通过 WoB 边界积分在圆柱表面显式维持不可穿透条件，正确使流动绕开障碍物，产生 Kármán 涡街（图 \ref{fig:complex_boundary_compare} 右）。
 \end{itemize}
+
+此外，\textbf{均匀来流绕圆柱}这一经典场景更能凸显根本差异：均匀来流本身是\textbf{调和场}（涡量 $\omega=0$），2022 涡量法因 $\omega=0$ 导致 Biot-Savart 重建速度为\textbf{零}，根本无法表示来流；而 2024 速度法直接以速度场为状态，天然包含该调和分量。
 
 \begin{figure}[H]
     \centering
     \includegraphics[width=0.95\textwidth]{report_results/fig_complex_boundary_comparison.png}
-    \caption{复杂边界对比：左——2022 涡量法对均匀来流绕圆柱的速度场（Biot-Savart 从 $\omega=0$ 重建出零速度，无法表示调和场）；右——2024 速度法正确模拟绕圆柱流动，产生 Kármán 涡街。}
+    \caption{复杂边界对比：左——2022 涡量法在涡旋靠近圆形障碍物时的速度场（流线直接穿过障碍物，违反不可穿透边界）；右——2024 速度法正确使流动绕开圆柱，产生 Kármán 涡街。}
     \label{fig:complex_boundary_compare}
 \end{figure}
 
