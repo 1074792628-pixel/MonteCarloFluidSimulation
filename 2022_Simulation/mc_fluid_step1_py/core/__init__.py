@@ -4,3 +4,4 @@ from .types import Vec2, RNG
 from .grid import Grid
 from .biot_savart import BiotSavart
 from .simulator import Simulator
+from .vortex_solver import VortexParticleSolver

@@ -14,7 +14,7 @@ def main():
     parser.add_argument('--dt', type=float, default=0.1, help='Time step')
     parser.add_argument('--nmc', type=int, default=128, help='WoS paths per query')
     parser.add_argument('--total_time', type=float, default=5.0, help='Total simulation time')
-    parser.add_argument('--output_dir', type=str, default='graph', help='Output directory')
+    parser.add_argument('--output_dir', type=str, default='output', help='Output directory')
     parser.add_argument('--fps', type=int, default=10, help='Animation FPS')
     parser.add_argument('--obstacle_radius', type=float, default=0.3, help='Circle obstacle radius')
     parser.add_argument('--obstacle_center_x', type=float, default=0.0)

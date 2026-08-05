@@ -95,10 +95,10 @@ pip install -r requirements.txt
 ## 结果示例
 
 ### Phase 1：涡量场演化（64²，两高斯涡旋绕转）
-![Phase1](mc_fluid_step1_py/graph/vorticity_evolution.gif)
+![Phase1](mc_fluid_step1_py/output/vorticity.gif)
 
 ### Phase 2：绕圆形障碍物流动（64²，WoS 边界）
-![Phase2](mc_fluid_step2_py/graph/vorticity_with_obstacle.gif)
+![Phase2](mc_fluid_step2_py/output/vorticity_with_obstacle.gif)
 
 ### Phase 3：3D 涡环切片（16³）
 ![Phase3](mc_fluid_step3_py/output/vorticity_3d_slice.gif)
